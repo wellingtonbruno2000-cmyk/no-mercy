@@ -183,6 +183,62 @@ class AudioEngine {
     osc.stop(start + dur + release + 0.05);
   }
 
+  private shotCurve: Float32Array | null = null;
+
+  /**
+   * Tiro alto e encorpado: estalo seco, pancada grave saturada, corpo do estouro e eco do bar.
+   * Vai direto para a saída (sem passar pelo compressor dos efeitos, que achatava o estouro).
+   */
+  private gunshot() {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime + 0.005;
+    const vol = settings.sfxOn ? settings.sfxVolume : 0;
+    if (vol <= 0) return;
+    const out = ctx.createGain();
+    out.gain.value = 1.15 * vol;
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -3;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.001;
+    limiter.release.value = 0.15;
+    out.connect(limiter);
+    limiter.connect(this.master);
+    // saturação (deixa o estouro "gordo" e mais alto)
+    if (!this.shotCurve) {
+      const n = 1024;
+      this.shotCurve = new Float32Array(n);
+      for (let i = 0; i < n; i++) {
+        const x = (i / (n - 1)) * 2 - 1;
+        this.shotCurve[i] = Math.tanh(x * 3.2);
+      }
+    }
+    const drive = ctx.createWaveShaper();
+    drive.curve = this.shotCurve;
+    drive.oversample = '2x';
+    const pre = ctx.createGain();
+    pre.gain.value = 1.6;
+    pre.connect(drive);
+    drive.connect(out);
+    // 1) estalo inicial (a "explosão" da pólvora)
+    this.noiseHit(pre, t, 0.045, { gain: 1.4, freq: 2500, q: 0.4, type: 'highpass' });
+    this.noiseHit(pre, t, 0.09, { gain: 1.0, freq: 1500, q: 0.6 });
+    // 2) pancada grave no peito
+    this.tone(pre, 170, t, 0.22, { gain: 1.2, slideTo: 38, attack: 0.002, release: 0.25 });
+    this.tone(pre, 85, t, 0.35, { gain: 0.9, slideTo: 30, attack: 0.002, release: 0.3, type: 'triangle' });
+    // 3) corpo do estouro
+    this.noiseHit(pre, t + 0.005, 0.55, { gain: 1.1, freq: 900, q: 0.5, type: 'lowpass' });
+    // 4) eco no bar (reflexões nas paredes) e cauda
+    for (const [d, g] of [[0.09, 0.35], [0.19, 0.22], [0.31, 0.13]] as const) this.noiseHit(out, t + d, 0.25, { gain: g, freq: 700, q: 0.7, type: 'lowpass' });
+    this.noiseHit(out, t + 0.05, 1.6, { gain: 0.16, freq: 420, q: 0.5, type: 'lowpass' });
+    // zumbido no ouvido depois do estouro
+    this.tone(out, 3800, t + 0.12, 1.2, { gain: 0.012, attack: 0.08, release: 0.6 });
+    setTimeout(() => {
+      out.disconnect();
+      limiter.disconnect();
+    }, 2500);
+  }
+
   private suspenseBus: GainNode | null = null;
 
   /**
@@ -416,10 +472,7 @@ class AudioEngine {
         this.tone(b, 160, t, 0.03, { gain: 0.25, slideTo: 90, release: 0.04 });
         break;
       case 'bang':
-        // estouro estilizado de desenho (sem realismo): pancada grave + chiado curto
-        this.tone(b, 120, t, 0.25, { gain: 0.6, slideTo: 35, release: 0.3 });
-        this.noiseHit(b, t, 0.5, { gain: 0.5, freq: 1200, q: 0.3, type: 'lowpass' });
-        this.noiseHit(b, t + 0.02, 0.18, { gain: 0.25, freq: 5000, q: 0.5, type: 'highpass' });
+        this.gunshot();
         break;
       case 'heartbeat':
         for (let i = 0; i < 3; i++) {

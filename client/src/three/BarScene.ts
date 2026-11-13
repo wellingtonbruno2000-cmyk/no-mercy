@@ -319,6 +319,8 @@ const _qb = new THREE.Quaternion();
 const _qc = new THREE.Quaternion();
 const _m4 = new THREE.Matrix4();
 const _eu = new THREE.Euler();
+const _qaxisY = new THREE.Vector3(0, 1, 0);
+const _m3 = new THREE.Vector3();
 const ARM_UP = 0.27;
 const ARM_LOW = 0.26;
 const smooth01 = (x: number) => {
@@ -605,18 +607,38 @@ class Character {
         transparent: true,
         depthWrite: false,
         blending: THREE.AdditiveBlending,
+        // aparece por cima de tudo: o cano encosta na cabeça, e o fogo não pode ficar escondido atrás dela
+        depthTest: false,
         map: canvasTex(128, 128, (g, w, h) => {
-          const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
-          gr.addColorStop(0, 'rgba(255,255,220,1)');
-          gr.addColorStop(0.3, 'rgba(255,190,70,.9)');
-          gr.addColorStop(1, 'rgba(255,120,0,0)');
+          // estrela de fogo: raios irregulares + núcleo branco
+          g.translate(64, 64);
+          for (let i = 0; i < 11; i++) {
+            const a = (i / 11) * Math.PI * 2 + Math.random() * 0.3;
+            const len = 44 + Math.random() * 20;
+            const gr = g.createLinearGradient(0, 0, Math.cos(a) * len, Math.sin(a) * len);
+            gr.addColorStop(0, 'rgba(255,240,180,1)');
+            gr.addColorStop(1, 'rgba(255,110,0,0)');
+            g.fillStyle = gr;
+            g.beginPath();
+            g.moveTo(Math.cos(a - 0.35) * 12, Math.sin(a - 0.35) * 12);
+            g.lineTo(Math.cos(a) * len, Math.sin(a) * len);
+            g.lineTo(Math.cos(a + 0.35) * 12, Math.sin(a + 0.35) * 12);
+            g.fill();
+          }
+          const gr = g.createRadialGradient(0, 0, 0, 0, 0, 58);
+          gr.addColorStop(0, 'rgba(255,255,240,1)');
+          gr.addColorStop(0.22, 'rgba(255,245,200,1)');
+          gr.addColorStop(0.45, 'rgba(255,170,50,.85)');
+          gr.addColorStop(0.75, 'rgba(255,90,0,.35)');
+          gr.addColorStop(1, 'rgba(255,60,0,0)');
           g.fillStyle = gr;
-          g.fillRect(0, 0, w, h);
+          g.fillRect(-64, -64, w, h);
         }),
       }),
     );
+    this.flashSprite.renderOrder = 12;
     this.flashSprite.scale.set(0.16, 0.16, 1);
-    this.flashSprite.position.set(0, 0.025, 0.19);
+    this.flashSprite.position.set(0, 0.025, 0.16);
     this.flashSprite.visible = false;
     this.smoke = new THREE.Sprite(
       new THREE.SpriteMaterial({
@@ -681,6 +703,21 @@ class Character {
   /** Onde o revólver fica deitado na mesa (espaço do personagem). */
   private gunTablePos(out = new THREE.Vector3()) {
     return out.set(this.gunSide * 0.36, 0.875, 0.4);
+  }
+
+  /** Revólver escapa da mão e cai no chão ao lado da cadeira. */
+  private gunOnFloor(since: number) {
+    const k = smooth01(since / 450);
+    const sd = this.gunSide;
+    // alvo no chão, no espaço do assento (o corpo e a cadeira tombam, o chão não)
+    const parent = this.group.parent;
+    _d.set(sd * 0.55, 0.035, 0.35);
+    if (parent) this.group.worldToLocal(parent.localToWorld(_d));
+    if (k < 1) this.gun.position.lerp(_d, Math.min(1, 0.08 + k * 0.4));
+    else this.gun.position.copy(_d);
+    _qb.setFromEuler(_eu.set(0, sd * 1.2, sd * (Math.PI / 2)));
+    _qa.setFromEuler(this.group.rotation).invert().multiply(_qb);
+    this.gun.quaternion.slerp(_qa, Math.min(1, 0.06 + k * 0.4));
   }
 
   private gunOnTable() {
@@ -751,7 +788,7 @@ class Character {
     if (this.aimStart < 0) this.aim(camPos);
     this.fireAt = performance.now();
     this.fireHit = hit;
-    if (hit) setTimeout(() => this.setDead(true), 120);
+    if (hit) setTimeout(() => this.setDead(true, true), 330);
     else this.reliefUntil = performance.now() + 2200;
   }
 
@@ -761,7 +798,9 @@ class Character {
     this.gunPoseTarget = 0;
   }
 
-  setDead(d: boolean) {
+  setDead(d: boolean, fromShot = false) {
+    // durante o disparo, quem decide a hora de cair é o próprio tiro (para dar tempo de ver o fogo)
+    if (d && !this.dead && !fromShot && this.fireHit && performance.now() - this.fireAt < 600) return;
     if (d && !this.dead) this.deadSince = performance.now();
     this.dead = d;
     for (const p of this.pupils) p.visible = !d;
@@ -1023,18 +1062,22 @@ class Character {
       pitch = -0.05;
       const since = now - this.aimStart;
       if (this.gunDrum && since < 1300 && this.fireAt < 0) this.gunDrum.rotation.y += 0.6 * (1 - since / 1300); // tambor girando
-      if (this.fireAt > 0) {
-        const f = now - this.fireAt;
-        // Fogo do cano só quando o tiro sai (BANG): clarão grande que ilumina a mesa
-        const burst = this.fireHit && f < 220;
-        this.flashPower = burst ? 26 * (1 - f / 220) : 0;
-        this.flashSprite.visible = burst;
-        if (burst) this.flashSprite.scale.setScalar(0.22 + (f / 220) * 0.25);
-        const sm = this.smoke.material as THREE.SpriteMaterial;
-        sm.opacity = this.fireHit && f < 1800 ? 0.6 * (1 - f / 1800) : 0;
-        this.smoke.position.set(0, 0.04 + f / 4000, 0.17);
-        this.smoke.scale.setScalar(0.1 + f / 5000);
+    }
+    if (this.fireAt > 0 && this.fireHit) {
+      const f = now - this.fireAt;
+      // Fogo do cano quando o tiro sai (BANG): clarão grande, visível para todos, que ilumina a mesa
+      const burst = f < 300;
+      this.flashPower = burst ? 32 * (1 - f / 300) : 0;
+      this.flashSprite.visible = burst;
+      if (burst) {
+        this.flashSprite.scale.setScalar(0.55 + (f / 300) * 0.4);
+        this.flashSprite.material.rotation = f * 0.004;
+        (this.flashSprite.material as THREE.SpriteMaterial).opacity = 1 - (f / 300) * 0.6;
       }
+      const sm = this.smoke.material as THREE.SpriteMaterial;
+      sm.opacity = f < 2200 ? 0.7 * (1 - f / 2200) : 0;
+      this.smoke.position.set(0, 0.04 + f / 3500, 0.17 + f / 9000);
+      this.smoke.scale.setScalar(0.14 + f / 3500);
     }
     if (now < this.reliefUntil && !this.dead) {
       bodyX = -0.12; // encosta, aliviado
@@ -1046,8 +1089,6 @@ class Character {
       const jolt = since < 180 ? Math.sin((since / 180) * Math.PI) * 0.25 : 0;
       this.group.rotation.x = THREE.MathUtils.lerp(this.group.rotation.x, -1.15, since < 180 ? 0.02 : 0.07) + jolt * 0.1;
       this.head.rotation.z = THREE.MathUtils.lerp(this.head.rotation.z, this.gunSide * 0.6, 0.06); // cabeça tomba
-      this.flashPower = 0;
-      this.flashSprite.visible = false;
       hands[0].set(-0.36, 0.14, 0.02); // braços soltos
       hands[1].set(0.36, 0.14, 0.02);
       poles[0].set(-0.3, 0, 1);
@@ -1077,7 +1118,8 @@ class Character {
     for (let i = 0; i < 2; i++) this.solveArm(i, hands[i], poles[i], i === ga ? armK : 0.25);
     this.armInit = true;
     if (this.gun.visible) {
-      if (gp > REACH) this.gunInHand(lift, recoilAmt);
+      if (this.dead) this.gunOnFloor(now - this.deadSince);
+      else if (gp > REACH) this.gunInHand(lift, recoilAmt);
       else this.gunOnTable();
     }
     const browExtra = this.suspicious && !this.lookSource ? 0.3 : 0;
@@ -1097,6 +1139,10 @@ export class BarScene {
   private camDrum: THREE.Object3D | null = null;
   private tmpV = new THREE.Vector3();
   private baseFov = 50;
+  /** Sua morte em 1ª pessoa: início da queda (0 = nenhuma). */
+  private deathStart = 0;
+  private spectator = false;
+  private seatCam = new THREE.Vector3(0, 2.05, 2.85);
   private suspenseStart = 0;
   private suspenseMs = 0;
   private onSuspense = (e: Event) => {
@@ -1461,10 +1507,12 @@ export class BarScene {
     if (this.portrait) {
       cam.fov = this.baseFov = 70;
       cam.position.set(0, 2.7, 3.0);
+      this.seatCam.copy(cam.position);
       this.baseLook.set(0, 0.45, -0.5);
     } else {
       cam.fov = this.baseFov = 50;
       cam.position.set(0, 2.05, 2.85);
+      this.seatCam.copy(cam.position);
       this.baseLook.set(0, 1.0, -0.45);
     }
     cam.updateProjectionMatrix();
@@ -1484,11 +1532,71 @@ export class BarScene {
 
   private applyCamera() {
     const cam = this.camera;
+    if (this.deathStart > 0 || this.spectator) return this.applyDeathCamera();
+    cam.position.copy(this.seatCam);
     const d = this.baseLook.clone().sub(cam.position);
     d.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
     const right = new THREE.Vector3().crossVectors(d, new THREE.Vector3(0, 1, 0)).normalize();
     d.applyAxisAngle(right, this.pitch);
     cam.lookAt(cam.position.clone().add(d));
+  }
+
+  /**
+   * Sua morte em 1ª pessoa: tranco do tiro, cai da cadeira para o lado até o chão, fica caído um
+   * instante e a câmera sobe para trás da sua cadeira, de onde você assiste ao resto da partida.
+   */
+  private applyDeathCamera() {
+    const cam = this.camera;
+    const e = this.deathStart > 0 ? performance.now() - this.deathStart : 1e9;
+    const seat = this.seatCam;
+    const floor = _a.set(seat.x + 0.55, 0.32, seat.z + 0.55);
+    const spec = _b.set(seat.x, seat.y + 0.95, seat.z + 1.05);
+    const table = _c.set(0, 0.85, -0.2);
+    // caído no chão, de lado, enxergando a mesa e os outros por baixo
+    const ceiling = _d.set(seat.x - 0.5, 1.15, seat.z - 2.6);
+    const pos = this.tmpV;
+    const look = _e;
+    let roll = 0;
+    if (e < 220) {
+      // tranco: a cabeça vai para o lado oposto ao tiro
+      const k = Math.sin((e / 220) * Math.PI);
+      pos.copy(seat).add(_d.set(-0.12 * k, 0.03 * k, 0));
+      look.copy(this.baseLook);
+      roll = -0.25 * k;
+    } else if (e < 1250) {
+      // queda da cadeira (acelera como gravidade) e quica de leve no chão
+      const k = (e - 220) / 1030;
+      const g = k * k;
+      pos.copy(seat).lerp(floor, g);
+      if (k > 0.85) pos.y += Math.sin(((k - 0.85) / 0.15) * Math.PI) * 0.06;
+      look.copy(this.baseLook).lerp(ceiling, smooth01(k * 1.2));
+      roll = 1.2 * g;
+    } else if (e < 2900) {
+      // caído, olhando para o teto, respiração fraca
+      pos.copy(floor);
+      look.copy(ceiling);
+      roll = 1.2 + Math.sin(e / 400) * 0.015;
+    } else if (e < 4500) {
+      // levanta como espectador
+      const k = smooth01((e - 2900) / 1600);
+      pos.copy(floor).lerp(spec, k);
+      look.copy(ceiling).lerp(table, k);
+      roll = 1.2 * (1 - k);
+    } else {
+      pos.copy(spec);
+      look.copy(table);
+    }
+    cam.position.copy(pos);
+    // espectador ainda pode olhar ao redor com o mouse
+    const free = e >= 4500 ? 1 : e > 2900 ? smooth01((e - 2900) / 1600) : 0;
+    const d = look.sub(pos);
+    if (free > 0) {
+      d.applyAxisAngle(_qaxisY, this.yaw * free);
+      const right = _m3.crossVectors(d, _qaxisY).normalize();
+      d.applyAxisAngle(right, this.pitch * free * 0.6);
+    }
+    cam.lookAt(_d.copy(pos).add(d));
+    if (roll) cam.rotateZ(roll);
   }
 
   /** Ponto na mesa onde cada assento coloca a carta jogada. */
@@ -1660,6 +1768,26 @@ export class BarScene {
     }
     this.myTableGun.visible = !b.out.includes(b.meId) && this.camGunState !== 'aim';
 
+    // Disparo (antes de marcar quem saiu: o tiro decide a hora da queda, depois do fogo do cano)
+    if (b.shot && b.shot.key !== this.lastShotKey) {
+      this.lastShotKey = b.shot.key;
+      const now = performance.now();
+      if (b.shot.id === b.meId) {
+        this.camGunState = 'aim';
+        this.shakeUntil = now + (b.shot.hit ? 500 : 250);
+        if (b.shot.hit) {
+          this.myFlashAt = now;
+          this.deathStart = now; // você cai da cadeira e depois a câmera vira espectadora
+        }
+      } else {
+        this.charById(b.shot.id)?.fire(b.shot.hit, this.camera.position);
+        if (b.shot.hit) this.shakeUntil = now + 220; // tranco do estouro
+      }
+    }
+    // Você está fora: modo espectador (na revanche volta para a cadeira)
+    this.spectator = b.out.includes(b.meId);
+    if (!this.spectator) this.deathStart = 0;
+
     // Quem saiu do jogo fica caído
     for (const o of this.state?.opponents ?? []) this.charById(o.id)?.setDead(b.out.includes(o.id));
 
@@ -1672,15 +1800,6 @@ export class BarScene {
       else if (b.aiming) this.charById(b.aiming)?.aim(this.camera.position);
     }
 
-    // Disparo
-    if (b.shot && b.shot.key !== this.lastShotKey) {
-      this.lastShotKey = b.shot.key;
-      if (b.shot.id === b.meId) {
-        this.camGunState = 'aim';
-        this.shakeUntil = performance.now() + (b.shot.hit ? 700 : 250);
-        if (b.shot.hit) this.myFlashAt = performance.now();
-      } else this.charById(b.shot.id)?.fire(b.shot.hit, this.camera.position);
-    }
     if (!b.aiming && !b.shot) {
       for (const c of this.chars) c.lower();
       this.camGunState = 'hidden';
@@ -1900,7 +2019,9 @@ export class BarScene {
     }
     // Sua arma: sobe até a lateral da cabeça e o tambor gira
     {
-      const show = this.camGunState === 'aim';
+      const dying = this.spectator && (this.deathStart === 0 || performance.now() - this.deathStart > 260);
+      const show = this.camGunState === 'aim' && !dying;
+      this.handGroup.visible = !this.spectator;
       this.camGun.visible = show || this.camGun.position.y > -0.35;
       // canto direito da tela, cano apontando para a sua cabeça (para a esquerda e um pouco para trás)
       const tgt = show ? this.tmpV.set(0.24, 0.02, -0.42) : this.tmpV.set(0.3, -0.5, -0.5);

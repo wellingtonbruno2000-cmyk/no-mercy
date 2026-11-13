@@ -117,7 +117,7 @@ export function BluffGame({ room }: { room: RoomView }) {
   useEffect(() => {
     if (!meHitKey) return;
     setHitFlash(true);
-    const t = setTimeout(() => setHitFlash(false), 2600);
+    const t = setTimeout(() => setHitFlash(false), 3300);
     return () => clearTimeout(t);
   }, [meHitKey]);
   // Suspense antes do disparo: bordas escurecem pulsando no ritmo do coração
@@ -435,14 +435,28 @@ export function BluffGame({ room }: { room: RoomView }) {
       {/* Você foi atingido */}
       <AnimatePresence>
         {hitFlash && (
-          <motion.div
-            className="pointer-events-none fixed inset-0 z-[45] flex items-center justify-center bg-red-900/60"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: [0, 1, 0.85] }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.5 }}
-          >
-            <p className="font-display text-5xl text-white drop-shadow-[0_4px_0_rgba(0,0,0,.6)]">VOCÊ ESTÁ FORA!</p>
+          <motion.div className="pointer-events-none fixed inset-0 z-[45] flex items-center justify-center" exit={{ opacity: 0, transition: { duration: 0.4 } }}>
+            {/* clarão vermelho do tiro, some enquanto você cai, e escurece antes da câmera levantar */}
+            <motion.div
+              className="absolute inset-0 bg-red-700"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: [0, 0.85, 0.25, 0.15, 0.15, 0] }}
+              transition={{ duration: 3.2, times: [0, 0.03, 0.2, 0.4, 0.8, 1] }}
+            />
+            <motion.div
+              className="absolute inset-0 bg-black"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: [0, 0, 0.7, 0.85, 0] }}
+              transition={{ duration: 3.3, times: [0, 0.35, 0.6, 0.85, 1] }}
+            />
+            <motion.p
+              className="relative font-display text-5xl text-white drop-shadow-[0_4px_0_rgba(0,0,0,.6)]"
+              initial={{ opacity: 0, scale: 1.4 }}
+              animate={{ opacity: [0, 0, 1, 1, 0], scale: [1.4, 1.4, 1, 1, 0.95] }}
+              transition={{ duration: 3.2, times: [0, 0.3, 0.42, 0.85, 1] }}
+            >
+              VOCÊ ESTÁ FORA!
+            </motion.p>
           </motion.div>
         )}
       </AnimatePresence>
