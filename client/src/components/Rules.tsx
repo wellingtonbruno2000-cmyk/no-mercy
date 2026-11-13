@@ -52,7 +52,7 @@ export function Rules({ open, onClose }: { open: boolean; onClose: () => void })
             A partida 1 dá 1 carta a cada jogador, a partida 2 dá 2 cartas, e assim por diante. Cada partida tem tantas rodadas quanto cartas
             na mão. O jogo termina quando não há cartas para a próxima distribuição completa (2 jogadores: 27 partidas · 3: 18 · 4: 13 · 5: 11 · 6: 9 · 7: 7 · 8: 6).
           </p>
-          <p>O baralho é embaralhado, cortado e distribuído uma carta por vez, começando à esquerda de quem embaralhou.</p>
+          <p>A cada partida o baralho inteiro é embaralhado (mistura aleatória + 7 embaralhadas riffle, como na mesa), cortado e distribuído uma carta por vez, começando à esquerda de quem embaralhou. Ninguém é favorecido: ao fim de cada partida dá para ver as cartas que todos receberam, e o placar mostra a sorte de cada um.</p>
           <p>Em cada rodada, todos jogam uma carta, na ordem da mesa. Não é preciso seguir a cor. A carta mais forte vence a rodada.</p>
           <p>Quem embaralha avança uma posição a cada partida; quem está à esquerda dele começa os palpites e a primeira rodada da partida. Nas rodadas seguintes, <b>quem venceu a rodada anterior começa jogando</b>.</p>
           <p>As rodadas que você vence ficam num montinho de cartas recolhidas ao seu lado.</p>

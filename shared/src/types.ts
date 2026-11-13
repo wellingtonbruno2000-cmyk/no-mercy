@@ -48,6 +48,8 @@ export interface HandRecord {
   /** Totais acumulados do jogo principal após esta partida (somente MAIN). */
   totals: Record<string, number> | null;
   rounds: RoundRecord[];
+  /** Cartas que cada participante recebeu nesta partida (revelado só depois que ela termina). */
+  dealt: Record<string, Card[]>;
 }
 
 export interface RankingEntry {
@@ -81,6 +83,8 @@ export interface GameState {
   currentTrick: Play[];
   tricksWon: Record<string, number>;
   rounds: RoundRecord[];
+  /** Mão inicial de cada participante na partida atual (nunca enviada antes do fim da partida). */
+  dealt?: Record<string, Card[]>;
   lastRound: RoundRecord | null;
   scores: Record<string, number>;
   handHistory: HandRecord[];
