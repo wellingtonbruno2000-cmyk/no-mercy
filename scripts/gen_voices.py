@@ -18,11 +18,11 @@ MODELS = ROOT / ".voice-models"
 HF = "https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR"
 
 # narrador + uma voz para cada personagem; length_scale > 1 deixa a fala mais lenta/pesada
+# Só vozes de qualidade "medium" e sem alterar o tom (a mudança de tom deixava o som estranho).
 VOICES = {
-    "narrador": {"model": "faber/medium/pt_BR-faber-medium", "length": 1.05, "pitch": 1.0},
-    "v1": {"model": "cadu/medium/pt_BR-cadu-medium", "length": 1.0, "pitch": 0.92},
-    "v2": {"model": "jeff/medium/pt_BR-jeff-medium", "length": 1.0, "pitch": 1.0},
-    "v3": {"model": "edresson/low/pt_BR-edresson-low", "length": 1.08, "pitch": 0.88},
+    "narrador": {"model": "faber/medium/pt_BR-faber-medium", "length": 1.05},
+    "v1": {"model": "cadu/medium/pt_BR-cadu-medium", "length": 1.0},
+    "v2": {"model": "jeff/medium/pt_BR-jeff-medium", "length": 0.97},
 }
 
 
@@ -65,6 +65,10 @@ def main() -> int:
 
     texts = sorted({t for items in PHRASES.values() for t in items})
     manifest = {"voices": [], "ids": {}}
+    import shutil
+
+    if OUT.exists():
+        shutil.rmtree(OUT)  # remove vozes antigas (ex.: a voz de baixa qualidade)
     for name, cfg in VOICES.items():
         model = download(cfg["model"])
         if not model:
@@ -77,10 +81,8 @@ def main() -> int:
             with tempfile.TemporaryDirectory() as tmp:
                 wav = pathlib.Path(tmp) / "a.wav"
                 synth(voice, text, wav, cfg["length"])
-                rate = voice.config.sample_rate
-                pitch = cfg["pitch"]
-                # tom do personagem + leve calor (graves) + volume normalizado; o eco de bar é aplicado no jogo
-                af = f"asetrate={int(rate * pitch)},aresample=44100,atempo={1 / pitch:.4f},bass=g=3,loudnorm=I=-16:TP=-1.5"
+                # leve calor (graves) + volume normalizado; o eco de bar é aplicado no jogo
+                af = "aresample=44100,bass=g=2,loudnorm=I=-16:TP=-1.5"
                 subprocess.run(
                     ["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav), "-af", af, "-ac", "1", "-b:a", "48k", str(mp3)],
                     check=True,

@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { BookOpen, Box, Crown, LogOut, RotateCcw, Skull, Square, Target, Trophy } from 'lucide-react';
+import { BookOpen, Box, Crown, LogOut, RotateCcw, Skull, Square, Target, Trophy, Volume2, VolumeX } from 'lucide-react';
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
-import { updateAudioSettings, useAudioSettings } from '../lib/audio';
+import { engine, updateAudioSettings, useAudioSettings } from '../lib/audio';
 import { webglAvailable } from '../lib/webgl';
 
 const BluffTable3D = lazy(() => import('../three/BluffTable3D'));
@@ -199,6 +199,21 @@ export function BluffGame({ room }: { room: RoomView }) {
             {use3d ? '2D' : '3D'}
           </button>
         )}
+        <button
+          className={`flex items-center gap-1 rounded-xl px-2 py-2 text-xs font-black hover:bg-white/10 ${prefs.tauntVoiceOn ? 'text-mist' : 'text-rose-300'}`}
+          onClick={() => {
+            if (prefs.tauntVoiceOn) {
+              window.speechSynthesis?.cancel();
+              engine.stopVoices();
+            }
+            updateAudioSettings({ tauntVoiceOn: !prefs.tauntVoiceOn });
+          }}
+          title={prefs.tauntVoiceOn ? 'Mutar as vozes' : 'Ligar as vozes'}
+          data-testid="bluff-mute-voices"
+        >
+          {prefs.tauntVoiceOn ? <Volume2 size={18} /> : <VolumeX size={18} />}
+          {prefs.tauntVoiceOn ? 'Vozes' : 'Mudo'}
+        </button>
         <AudioButtons room={room} />
         <button className="rounded-xl p-2 text-mist/80 hover:bg-white/10" onClick={() => setShowRules(true)} aria-label="Regras" title="Regras">
           <BookOpen size={20} />
