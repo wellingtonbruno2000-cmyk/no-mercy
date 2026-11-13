@@ -1,8 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { Check, ChevronDown, Crown, Dices, LogOut, Medal, RotateCcw, Swords, Trophy, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { playPower, type Card, type HandRecord, type PlayerView, type RoomView } from '@nomercy/shared';
-import { PlayingCard } from './PlayingCard';
+import { Check, Crown, LogOut, Medal, RotateCcw, Swords, Trophy, X } from 'lucide-react';
+import { useMemo } from 'react';
+import type { HandRecord, PlayerView, RoomView } from '@nomercy/shared';
 import { useCountdown } from '../lib/hooks';
 import { leaveRoom, send } from '../lib/store';
 import { Avatar } from './Avatar';
@@ -63,101 +62,6 @@ function ResultTable({ rec, g, names }: { rec: HandRecord; g: PlayerView; names:
   );
 }
 
-const cardValue = (c: Card) => (c.value === 'JOKER' ? 11 : (c.value as number));
-
-/** Cartas que cada jogador recebeu na partida (transparência do embaralhamento). */
-function DealtCards({ rec, g, names }: { rec: HandRecord; g: PlayerView; names: Names }) {
-  const [open, setOpen] = useState(false);
-  const dealt = rec.dealt ?? {};
-  const order = g.players.map((p) => p.id).filter((id) => dealt[id]);
-  if (order.length === 0) return null;
-  return (
-    <div className="rounded-2xl bg-black/20 ring-1 ring-white/10">
-      <button className="flex w-full items-center justify-between gap-2 px-3 py-2 text-sm font-bold text-mist" onClick={() => setOpen(!open)} data-testid="dealt-toggle">
-        <span className="flex items-center gap-2">
-          <Dices size={16} className="text-gold" /> Cartas que cada um recebeu
-        </span>
-        <ChevronDown size={16} className={`transition ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && (
-        <div className="space-y-2 px-3 pb-3">
-          {order.map((id) => {
-            const cards = dealt[id].slice().sort((a, b) => playPower(a, a.value === 'JOKER' ? 'MAX' : null) - playPower(b, b.value === 'JOKER' ? 'MAX' : null));
-            const avg = cards.reduce((a, c) => a + cardValue(c), 0) / cards.length;
-            return (
-              <div key={id} className="flex items-center gap-2">
-                <span className="w-20 shrink-0 truncate text-xs font-semibold text-white">{id === g.you ? 'Você' : names.name(id)}</span>
-                <div className="flex min-w-0 flex-1 flex-wrap gap-1">
-                  {cards.map((c) => (
-                    <PlayingCard key={c.id} card={c} size="xs" />
-                  ))}
-                </div>
-                <span className="shrink-0 text-[11px] font-bold text-gold" title="Valor médio (coringa = 11)">
-                  média {avg.toFixed(1)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Soma da sorte de cada jogador no jogo: prova de que o embaralhamento não favorece ninguém. */
-function LuckTable({ g, names }: { g: PlayerView; names: Names }) {
-  const rows = g.players.map((p) => {
-    let n = 0;
-    let sum = 0;
-    let jokers = 0;
-    let strong = 0;
-    for (const h of g.handHistory) {
-      for (const c of h.dealt?.[p.id] ?? []) {
-        n++;
-        sum += cardValue(c);
-        if (c.value === 'JOKER') jokers++;
-        if (cardValue(c) >= 9) strong++;
-      }
-    }
-    return { id: p.id, n, avg: n ? sum / n : 0, jokers, strong };
-  });
-  if (rows.every((r) => r.n === 0)) return null;
-  return (
-    <div className="mt-5 space-y-2" data-testid="luck-table">
-      <h3 className="flex items-center gap-2 font-display text-white">
-        <Dices size={18} className="text-gold" /> Sorte nas cartas (este jogo)
-      </h3>
-      <div className="overflow-hidden rounded-2xl ring-1 ring-white/10">
-        <table className="w-full text-sm">
-          <thead className="bg-white/5 text-[11px] uppercase tracking-wider text-mist/60">
-            <tr>
-              <th className="px-3 py-2 text-left">Jogador</th>
-              <th className="px-2 py-2">Cartas</th>
-              <th className="px-2 py-2">Média</th>
-              <th className="px-2 py-2">9, 10 e coringas</th>
-              <th className="px-2 py-2">Coringas</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id} className={`border-t border-white/5 ${r.id === g.you ? 'bg-violet/15' : ''}`}>
-                <td className="px-3 py-1.5 font-semibold text-white">{r.id === g.you ? 'Você' : names.name(r.id)}</td>
-                <td className="px-2 py-1.5 text-center">{r.n}</td>
-                <td className="px-2 py-1.5 text-center font-bold text-gold">{r.avg.toFixed(2)}</td>
-                <td className="px-2 py-1.5 text-center">{r.n ? Math.round((100 * r.strong) / r.n) : 0}%</td>
-                <td className="px-2 py-1.5 text-center">{r.jokers}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <p className="text-xs text-mist/50">
-        Média esperada: 6,0 (coringa = 11) · 27% de cartas fortes. Com poucas partidas a sorte varia; ao longo do jogo os números se aproximam para todos.
-      </p>
-    </div>
-  );
-}
-
 export function HandResult({ g, names, deadline }: { g: PlayerView; names: Names; deadline: number | null }) {
   const open = g.phase === 'HAND_RESULT' && !!g.lastHandResult;
   const cd = useCountdown(open ? deadline : null);
@@ -191,7 +95,6 @@ export function HandResult({ g, names, deadline }: { g: PlayerView; names: Names
             </motion.div>
           )}
           <ResultTable rec={rec} g={g} names={names} />
-          <DealtCards rec={rec} g={g} names={names} />
           <p className="text-center text-sm text-mist/60">
             {cd
               ? isLastMain
@@ -254,7 +157,6 @@ export function Scoreboard({ open, onClose, g, names }: { open: boolean; onClose
         </table>
       </div>
       <p className="mt-2 text-xs text-mist/50">Em cada partida: pontos e palpite/vitórias.</p>
-      <LuckTable g={g} names={names} />
 
       {g.tiebreakHistory.length > 0 && (
         <div className="mt-5 space-y-3">

@@ -6,7 +6,6 @@ import {
   MAX_PLAYERS,
   MIN_PLAYERS,
   shuffle,
-  tableShuffle,
   trickWinner,
 } from './cards';
 import type {
@@ -104,20 +103,18 @@ export function createGame(players: PlayerInfo[], opts: CreateGameOptions = {}):
  * começando pelo jogador à esquerda de quem embaralhou.
  */
 function deal(state: GameState, participants: string[], cards: number, randomInt: RandomInt) {
-  // Baralho novo a cada partida: embaralhado, 7 riffles e corte (ver tableShuffle).
-  const deck = tableShuffle(createDeck(), randomInt);
-  if (cards * participants.length > deck.length) {
+  const shuffled = shuffle(createDeck(), randomInt);
+  if (cards * participants.length > shuffled.length) {
     throw new GameError('DECK_TOO_SMALL', 'Cartas insuficientes para a distribuição.');
   }
+  const cut = 1 + randomInt(shuffled.length - 1);
+  const deck = [...shuffled.slice(cut), ...shuffled.slice(0, cut)];
   state.hands = {};
   for (const id of participants) state.hands[id] = [];
   let next = 0;
   for (let round = 0; round < cards; round++) {
     for (const id of participants) state.hands[id].push(deck[next++]);
   }
-  // Guardado para a transparência: revelado a todos só quando a partida termina.
-  state.dealt = {};
-  for (const id of participants) state.dealt[id] = state.hands[id].map((c) => ({ ...c }));
 }
 
 function resetHand(state: GameState, participants: string[], cards: number, blind: boolean, randomInt: RandomInt) {
@@ -312,7 +309,6 @@ function finishHand(state: GameState) {
     points,
     totals,
     rounds: state.rounds.slice(),
-    dealt: structuredClone(state.dealt ?? {}),
   };
   if (state.stage === 'MAIN') state.handHistory.push(record);
   else state.tiebreakHistory.push(record);
