@@ -1,0 +1,75 @@
+{
+  "name": "no-mercy-desktop",
+  "productName": "NO MERCY",
+  "version": "1.2.0",
+  "description": "NO MERCY — jogo de cartas estratégico (versão para PC)",
+  "author": "NO MERCY",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "prepare-app": "node prepare-app.mjs",
+    "start": "npm run prepare-app && electron .",
+    "dist:win": "npm run prepare-app && electron-builder --win nsis --x64 --publish never",
+    "dist:dir": "npm run prepare-app && electron-builder --win dir --x64 --publish never",
+    "dist:installer": "node build-installer.mjs --pack"
+  },
+  "devDependencies": {
+    "electron": "33.4.11",
+    "electron-builder": "26.0.12"
+  },
+  "build": {
+    "appId": "com.nomercy.game",
+    "productName": "NO MERCY",
+    "copyright": "NO MERCY",
+    "asar": false,
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "launcher.html",
+      "app/**/*",
+      "build/icon.png"
+    ],
+    "extraResources": [
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": false,
+      "include": "build/installer.nsh",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "uninstallDisplayName": "NO MERCY",
+      "artifactName": "NO-MERCY-Setup-${version}.exe",
+      "language": "1046",
+      "deleteAppDataOnUninstall": false
+    },
+    "electronLanguages": [
+      "pt-BR",
+      "en-US"
+    ]
+  }
+}

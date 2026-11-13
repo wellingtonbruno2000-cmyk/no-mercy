@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:" />
+<title>NO MERCY</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px;
+    font-family: "Segoe UI", system-ui, sans-serif; color: #eadcc4;
+    background: radial-gradient(900px 520px at 50% -8%, rgba(227,169,72,.28), transparent 65%),
+                radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(0,0,0,.75) 100%),
+                linear-gradient(180deg, #23160f 0%, #140e0b 55%, #0b0806 100%); }
+  .lamp { position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 2px; height: 48px; background: #000; }
+  .lamp::after { content: ''; position: absolute; top: 46px; left: -34px; width: 70px; height: 22px; border-radius: 40px 40px 0 0; background: #1a1a1a;
+    box-shadow: 0 18px 50px 18px rgba(255,190,90,.35); }
+  .wrap { width: 100%; max-width: 460px; text-align: center; }
+  h1 { font-family: Georgia, "Times New Roman", serif; font-size: 64px; line-height: .9; margin: 40px 0 6px; letter-spacing: 2px; }
+  h1 .no { color: #fff; text-shadow: 0 5px 0 #9b3d2a; } h1 .mercy { color: #e3a948; text-shadow: 0 5px 0 #0a0604; display: block; }
+  .tag { letter-spacing: .35em; font-size: 12px; font-weight: 700; opacity: .7; text-transform: uppercase; margin-bottom: 26px; }
+  .panel { border-radius: 24px; padding: 20px; border: 1px solid rgba(227,169,72,.22);
+    background: linear-gradient(180deg, rgba(60,38,24,.75), rgba(28,18,12,.85)); box-shadow: 0 20px 50px -20px #000; }
+  button { width: 100%; border: 0; border-radius: 16px; padding: 15px; font-size: 17px; font-weight: 800; cursor: pointer; margin-top: 10px;
+    display: flex; align-items: center; justify-content: center; gap: 10px; transition: filter .15s, transform .1s; }
+  button:active { transform: scale(.98); } button:hover { filter: brightness(1.1); }
+  .online { background: linear-gradient(180deg, #f0c06a, #b77d26); color: #24160c; }
+  .offline { background: linear-gradient(180deg, #b24a33, #7a2c1d); color: #fbe9d0; }
+  .ghost { background: rgba(0,0,0,.3); color: #eadcc4; border: 1px solid rgba(227,169,72,.25); font-size: 14px; padding: 10px; }
+  small { display: block; opacity: .65; font-weight: 600; font-size: 12px; margin-top: 2px; }
+  .server { margin-top: 16px; text-align: left; font-size: 13px; }
+  label { font-weight: 700; opacity: .8; }
+  input { width: 100%; margin-top: 6px; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,.15); background: rgba(0,0,0,.35);
+    color: #fff; font-size: 15px; outline: none; } input:focus { border-color: #e3a948; }
+  .row { display: flex; gap: 8px; } .row button { margin-top: 6px; width: auto; padding: 0 16px; font-size: 14px; }
+  .msg { min-height: 18px; margin-top: 6px; font-size: 12px; } .err { color: #fca5a5; } .ok { color: #86efac; }
+  .foot { margin-top: 18px; font-size: 12px; opacity: .5; }
+</style>
+</head>
+<body>
+<div class="lamp"></div>
+<div class="wrap">
+  <h1><span class="no">NO</span><span class="mercy">MERCY</span></h1>
+  <div class="tag">Preveja. Vença. Sem piedade.</div>
+  <div class="panel">
+    <button class="online" id="online">🌐 Jogar online <small>com amigos · salas · chat de voz</small></button>
+    <button class="offline" id="offline">🤖 Jogar offline <small>contra bots · sem internet</small></button>
+    <div class="server" id="serverBox">
+      <label for="url">Endereço do servidor online</label>
+      <div class="row">
+        <input id="url" placeholder="https://seu-jogo.onrender.com" spellcheck="false" />
+        <button class="ghost" id="save">Salvar</button>
+      </div>
+      <div class="msg" id="msg"></div>
+    </div>
+  </div>
+  <div class="foot">Aperte <b>Alt</b> para ver o menu · <b>F11</b> tela cheia · <b>Ctrl+M</b> volta para esta tela</div>
+</div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const api = window.nomercy;
+  const msg = (t, cls) => { $('msg').textContent = t; $('msg').className = 'msg ' + (cls || ''); };
+  async function refresh() {
+    const cfg = await api.getConfig();
+    $('url').value = cfg.onlineUrl || '';
+    if (!cfg.onlineUrl) msg('Configure o endereço do jogo publicado para jogar online.', '');
+  }
+  async function save() {
+    const r = await api.setOnlineUrl($('url').value);
+    if (!r.ok) return msg(r.error, 'err'), false;
+    $('url').value = r.config.onlineUrl;
+    msg(r.config.onlineUrl ? 'Endereço salvo!' : 'Endereço removido.', 'ok');
+    return true;
+  }
+  $('save').onclick = save;
+  $('url').addEventListener('keydown', (e) => { if (e.key === 'Enter') save(); });
+  $('online').onclick = async () => {
+    if ($('url').value.trim()) { if (!(await save())) return; }
+    const cfg = await api.getConfig();
+    if (!cfg.onlineUrl) { msg('Digite o endereço do servidor online primeiro.', 'err'); $('url').focus(); return; }
+    msg('Conectando… (se o servidor estava dormindo, pode levar até 1 minuto)', '');
+    api.playOnline();
+  };
+  $('offline').onclick = () => { msg('Abrindo…', ''); api.playOffline(); };
+  refresh();
+</script>
+</body>
+</html>
