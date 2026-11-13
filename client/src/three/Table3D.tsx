@@ -8,6 +8,7 @@ interface Props {
   g: PlayerView;
   room: RoomView;
   onFail: () => void;
+  onReady: () => void;
   hand: HandState;
   /** Você está analisando suas cartas (mão 2D): os personagens ficam desconfiados. */
   suspicious: boolean;
@@ -16,7 +17,7 @@ interface Props {
 }
 
 /** Liga o estado do jogo (vindo do servidor) à cena 3D. Carregado sob demanda. */
-export default function Table3D({ g, room, onFail, hand, suspicious, onCardClick, onCardHover }: Props) {
+export default function Table3D({ g, room, onFail, onReady, hand, suspicious, onCardClick, onCardHover }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<BarScene | null>(null);
   const voice = useVoice();
@@ -31,6 +32,7 @@ export default function Table3D({ g, room, onFail, hand, suspicious, onCardClick
         getLook,
         onContextLost: () => onFail(),
       });
+      onReady();
     } catch (err) {
       console.warn('[3D] indisponível, voltando para 2D', err);
       onFail();
@@ -39,7 +41,7 @@ export default function Table3D({ g, room, onFail, hand, suspicious, onCardClick
       sceneRef.current?.dispose();
       sceneRef.current = null;
     };
-  }, [onFail]);
+  }, [onFail, onReady]);
 
   useEffect(() => {
     const scene = sceneRef.current;

@@ -27,7 +27,7 @@ import {
   type RoomView,
 } from '@nomercy/shared';
 import { useCountdown, useMedia, useWindowWidth } from '../lib/hooks';
-import { leaveRoom, send } from '../lib/store';
+import { leaveRoom, send, toast } from '../lib/store';
 import { AudioButtons } from './AudioPanel';
 import { Avatar } from './Avatar';
 import { BarAmbience } from './BarAmbience';
@@ -109,7 +109,25 @@ export function Game({ room }: { room: RoomView }) {
   const onFail3d = useCallback(() => setFailed3d(true), []);
   const can3d = g.players.length >= 2 && g.players.length <= 4 && webglAvailable() && !failed3d;
   const use3d = can3d && prefs.view3d;
-  const hand3d = use3d && prefs.hand3d;
+  // A mesa 3D é carregada sob demanda: até ela ficar pronta, suas cartas aparecem em 2D.
+  const [ready3d, setReady3d] = useState(false);
+  const onReady3d = useCallback(() => setReady3d(true), []);
+  useEffect(() => {
+    if (!use3d) {
+      setReady3d(false);
+      return;
+    }
+    if (ready3d) return;
+    // Se o 3D não carregar em 15 s (internet lenta, aparelho sem suporte), volta para a mesa 2D.
+    const t = setTimeout(() => {
+      setFailed3d(true);
+      toast('A mesa 3D demorou para carregar. Mostrando a mesa 2D.', 'info');
+    }, 15000);
+    return () => clearTimeout(t);
+  }, [use3d, ready3d]);
+  const hand3d = use3d && prefs.hand3d && ready3d;
+  /** Layout 3D só quando a cena já está pronta; até lá a mesa 2D completa continua visível. */
+  const layout3d = use3d && ready3d;
 
   // Seleção de carta compartilhada entre a mão 2D e a mão 3D
   const [selected, setSelected] = useState<string | null>(null);
@@ -134,13 +152,15 @@ export function Game({ room }: { room: RoomView }) {
 
   return (
     <div className={`relative flex h-full flex-col overflow-hidden ${tiebreak ? 'felt-tiebreak' : 'felt'}`}>
-      {use3d ? (
+      {!layout3d && <BarAmbience table tiebreak={tiebreak} />}
+      {use3d && (
         <Safe3D onFail={onFail3d}>
-        <Suspense fallback={<div className="absolute inset-0 flex items-center justify-center text-sm text-mist/60">Preparando a mesa 3D…</div>}>
+        <Suspense fallback={null}>
           <Table3D
             g={g}
             room={room}
             onFail={onFail3d}
+            onReady={onReady3d}
             hand={handState}
             suspicious={hovering}
             onCardClick={onCardClick}
@@ -148,8 +168,11 @@ export function Game({ room }: { room: RoomView }) {
           />
         </Suspense>
         </Safe3D>
-      ) : (
-        <BarAmbience table tiebreak={tiebreak} />
+      )}
+      {use3d && !ready3d && (
+        <div className="pointer-events-none fixed bottom-3 right-3 z-30 rounded-full bg-black/60 px-3 py-1 text-xs font-semibold text-mist/70">
+          Carregando mesa 3D…
+        </div>
       )}
       <TopBar
         g={g}
@@ -162,9 +185,9 @@ export function Game({ room }: { room: RoomView }) {
         onLeave={() => setConfirmLeave(true)}
       />
 
-      <main className={`relative flex min-h-0 flex-1 flex-col ${use3d ? 'pointer-events-none' : ''}`}>
+      <main className={`relative flex min-h-0 flex-1 flex-col ${layout3d ? 'pointer-events-none' : ''}`}>
         {/* Adversários */}
-        {use3d ? null : desktop ? (
+        {layout3d ? null : desktop ? (
           <div className="pointer-events-none absolute inset-0">
             {opponents.map((p, i) => {
               const k = opponents.length;
@@ -192,9 +215,9 @@ export function Game({ room }: { room: RoomView }) {
         )}
 
         {/* Centro da mesa */}
-        <div className={`relative z-10 flex min-h-0 flex-1 flex-col items-center px-3 ${use3d ? 'pointer-events-none justify-start pt-2' : 'justify-center'}`}>
-          {!use3d && <div className={`bar-table pointer-events-none absolute inset-x-5 inset-y-4 rounded-[48px] md:hidden ${tiebreak ? 'bar-table-tiebreak' : ''}`} />}
-          <Center g={g} names={names} room={room} desktop={desktop} mode3d={use3d} />
+        <div className={`relative z-10 flex min-h-0 flex-1 flex-col items-center px-3 ${layout3d ? 'pointer-events-none justify-start pt-2' : 'justify-center'}`}>
+          {!layout3d && <div className={`bar-table pointer-events-none absolute inset-x-5 inset-y-4 rounded-[48px] md:hidden ${tiebreak ? 'bar-table-tiebreak' : ''}`} />}
+          <Center g={g} names={names} room={room} desktop={desktop} mode3d={layout3d} />
         </div>
       </main>
 
@@ -203,7 +226,7 @@ export function Game({ room }: { room: RoomView }) {
         room={room}
         names={names}
         desktop={desktop}
-        mode3d={use3d}
+        mode3d={layout3d}
         hand3d={hand3d}
         selected={selected}
         setSelected={setSelected}
