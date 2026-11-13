@@ -44,7 +44,7 @@ export interface RoomView {
 export type Ack<T = object> = (res: ({ ok: true } & T) | { ok: false; error: string }) => void;
 
 export interface ClientToServerEvents {
-  'room:create': (p: { name: string; solo?: boolean; botCount?: number }, ack: Ack<{ code: string }>) => void;
+  'room:create': (p: { name: string; solo?: boolean; botCount?: number; code?: string }, ack: Ack<{ code: string }>) => void;
   'room:join': (p: { code: string; name: string }, ack: Ack<{ code: string }>) => void;
   'room:leave': (ack?: Ack) => void;
   'room:addBot': (ack?: Ack) => void;

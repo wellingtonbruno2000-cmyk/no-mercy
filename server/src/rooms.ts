@@ -141,10 +141,13 @@ export class RoomManager {
     }
   }
 
-  create(playerId: string, name: string): Room {
+  /** Cria uma sala. Se `preferredCode` estiver livre (ex.: sala perdida num reinício), reutiliza o mesmo código. */
+  create(playerId: string, name: string, preferredCode?: string): Room {
     if (this.roomOf(playerId)) this.leave(playerId);
+    const wanted = String(preferredCode ?? '').trim().toUpperCase();
+    const reuse = /^[A-Z2-9]{5}$/.test(wanted) && !this.rooms.has(wanted);
     const room: Room = {
-      code: this.newCode(),
+      code: reuse ? wanted : this.newCode(),
       hostId: playerId,
       members: [{ id: playerId, name: sanitizeName(name), isBot: false, connected: true, autopilot: false, voice: false, micOn: false }],
       settings: { turnSeconds: 0 },
@@ -509,7 +512,7 @@ export class RoomManager {
    */
   restoreRoom(saved: SavedRoom, playerId: string): Room | null {
     if (!saved || saved.v !== 1 || !saved.game || saved.status !== 'PLAYING') return null;
-    if (Date.now() - saved.savedAt > 12 * 60 * 60 * 1000) return null; // cópias com mais de 12 h expiram
+    if (Date.now() - saved.savedAt > 48 * 60 * 60 * 1000) return null; // cópias com mais de 48 h expiram
     const member = saved.members.find((m) => m.id === playerId && !m.isBot);
     if (!member || member.autopilot) return null;
     const existing = this.rooms.get(saved.code);

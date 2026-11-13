@@ -1,8 +1,8 @@
 import { motion } from 'framer-motion';
 import { Bot, BookOpen, Download, RotateCcw, Share, DoorOpen, Loader2, Plus, Users, Wifi, WifiOff } from 'lucide-react';
 import { useState } from 'react';
-import { MAX_PLAYERS, MIN_PLAYERS, maxHandsFor } from '@nomercy/shared';
-import { discardSavedGame, getSavedName, resumeGame, saveName, send, useStore } from '../lib/store';
+import { APP_VERSION, MAX_PLAYERS, MIN_PLAYERS, maxHandsFor } from '@nomercy/shared';
+import { discardSavedGame, forgetLastRoom, getSavedName, resumeGame, returnToLastRoom, saveName, send, useStore } from '../lib/store';
 import { FloatingCards } from './FloatingCards';
 import { BarAmbience } from './BarAmbience';
 import { Logo } from './Logo';
@@ -12,7 +12,7 @@ import { AudioButtons } from './AudioPanel';
 import { isIOS, promptInstall, useInstall } from '../lib/install';
 
 export function Home() {
-  const { connected, savedGame, resuming } = useStore();
+  const { connected, savedGame, resuming, lastRoom } = useStore();
   const initialCode = new URLSearchParams(window.location.search).get('sala')?.toUpperCase() ?? '';
   const [name, setName] = useState(getSavedName());
   const [code, setCode] = useState(initialCode);
@@ -78,6 +78,25 @@ export function Home() {
             </div>
           )}
 
+          {!savedGame && lastRoom && (
+            <div className="rounded-2xl bg-white/5 p-3 ring-1 ring-gold/30" data-testid="last-room">
+              <button
+                className="btn-gold w-full"
+                disabled={needName || busy || !connected}
+                onClick={() => run(() => returnToLastRoom(cleanName))}
+                data-testid="return-room"
+              >
+                <DoorOpen size={20} /> Voltar para a sala {lastRoom.code}
+              </button>
+              <p className="mt-1.5 text-center text-xs text-mist/60">
+                O link de convite continua o mesmo ·{' '}
+                <button className="underline hover:text-white" onClick={forgetLastRoom}>
+                  esquecer
+                </button>
+              </p>
+            </div>
+          )}
+
           <button className="btn-primary w-full text-lg" disabled={needName || busy} onClick={() => setMode('solo')}>
             <Bot size={22} /> Jogar contra bots
           </button>
@@ -116,6 +135,7 @@ export function Home() {
             {connected ? <Wifi size={16} className="text-emerald-400" /> : <WifiOff size={16} className="text-rose-400" />}
             {connected ? 'Online' : 'Conectando…'}
           </span>
+          <span className="text-xs text-mist/40" data-testid="version">v{APP_VERSION}</span>
         </div>
       </div>
 

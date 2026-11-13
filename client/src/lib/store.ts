@@ -15,6 +15,8 @@ interface State {
   /** Existe uma partida salva que pode ser retomada (cópia de segurança). */
   savedGame: { code: string; t: number } | null;
   resuming: boolean;
+  /** Última sala em que você esteve (para voltar a ela com o mesmo código, mesmo sem partida salva). */
+  lastRoom: { code: string; t: number } | null;
   room: RoomView | null;
   toasts: Toast[];
   /** Diferença entre o relógio do servidor e o local (ms). */
@@ -66,7 +68,7 @@ function readSnap(): Snap | null {
     const raw = localStorage.getItem(SNAP_KEY);
     if (!raw) return null;
     const s = JSON.parse(raw) as Snap;
-    if (!s?.data || Date.now() - s.t > 12 * 60 * 60 * 1000) return null;
+    if (!s?.data || Date.now() - s.t > 48 * 60 * 60 * 1000) return null;
     return s;
   } catch {
     return null;
@@ -89,7 +91,25 @@ let state: State = {
   clockOffset: 0,
   savedGame: initialSnap ? { code: initialSnap.code, t: initialSnap.t } : null,
   resuming: false,
+  lastRoom: readLastRoom(),
 };
+
+function readLastRoom(): { code: string; t: number } | null {
+  try {
+    const r = JSON.parse(localStorage.getItem('nomercy:lastRoom') ?? 'null') as { code: string; t: number } | null;
+    return r && /^[A-Z2-9]{5}$/.test(r.code) && Date.now() - r.t < 48 * 60 * 60 * 1000 ? r : null;
+  } catch {
+    return null;
+  }
+}
+function writeLastRoom(code: string | null) {
+  try {
+    if (code) localStorage.setItem('nomercy:lastRoom', JSON.stringify({ code, t: Date.now() }));
+    else localStorage.removeItem('nomercy:lastRoom');
+  } catch {
+    /* ignora */
+  }
+}
 const listeners = new Set<() => void>();
 function set(patch: Partial<State>) {
   state = { ...state, ...patch };
@@ -110,7 +130,8 @@ socket.on('connect', () => {
 });
 socket.on('disconnect', () => set({ connected: false }));
 socket.on('room:update', (room) => {
-  set({ room, clockOffset: room.serverTime - Date.now(), savedGame: null });
+  set({ room, clockOffset: room.serverTime - Date.now(), savedGame: null, lastRoom: { code: room.code, t: Date.now() } });
+  writeLastRoom(room.code);
   syncUrl(room.code);
   if (room.status !== 'PLAYING') writeSnap(null);
 });
@@ -122,6 +143,10 @@ socket.on('room:closed', ({ reason }) => {
   set({ room: null, savedGame: null });
   syncUrl(null);
   toast(reason, 'info');
+  if (/removido/.test(reason)) {
+    writeLastRoom(null);
+    set({ lastRoom: null });
+  }
 });
 
 /**
@@ -158,6 +183,30 @@ export async function resumeGame(auto = false): Promise<boolean> {
     toast('A partida foi encerrada (o servidor reiniciou).', 'info');
   }
   return false;
+}
+
+/**
+ * Volta para a última sala: se ela ainda existe, entra; se sumiu (servidor reiniciou), recria com o
+ * MESMO código — o link de convite que você mandou aos amigos continua valendo.
+ */
+export async function returnToLastRoom(name: string): Promise<void> {
+  const last = state.lastRoom;
+  if (!last) return;
+  const joined = await new Promise<{ ok: boolean; error?: string }>((resolve) =>
+    socket.emit('room:join', { code: last.code, name }, (r) => resolve(r as { ok: boolean; error?: string })),
+  );
+  if (joined.ok) return;
+  if (joined.error && !/não encontrada/i.test(joined.error)) {
+    toast(joined.error);
+    return;
+  }
+  const created = await send('room:create', { name, code: last.code });
+  if (created.ok) toast(`Sala ${last.code} reaberta. Mande o mesmo link para seus amigos entrarem.`, 'success');
+}
+
+export function forgetLastRoom() {
+  writeLastRoom(null);
+  set({ lastRoom: null });
 }
 
 export function discardSavedGame() {
@@ -212,7 +261,8 @@ export function send(event: keyof ClientToServerEvents, payload?: unknown): Prom
 export function leaveRoom() {
   void send('room:leave');
   writeSnap(null);
-  set({ room: null, savedGame: null });
+  writeLastRoom(null);
+  set({ room: null, savedGame: null, lastRoom: null });
   syncUrl(null);
 }
 

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { Server, type Socket } from 'socket.io';
-import { GameError, type Ack, type ClientToServerEvents, type ServerToClientEvents } from '@nomercy/shared';
+import { APP_VERSION, GameError, type Ack, type ClientToServerEvents, type ServerToClientEvents } from '@nomercy/shared';
 import { DEFAULT_TIMINGS, RoomError, RoomManager, type Room, type SavedRoom, type Timings } from './rooms';
 import { open as openSnapshot, playerIdFromToken, seal } from './snapshot';
 
@@ -35,7 +35,7 @@ const secureRandomInt = (max: number) => cryptoRandomInt(0, max);
 export async function startServer(opts: ServerOptions = {}) {
   const app = express();
   app.disable('x-powered-by');
-  app.get('/health', (_req, res) => res.json({ ok: true, name: 'NO MERCY' }));
+  app.get('/health', (_req, res) => res.json({ ok: true, name: 'NO MERCY', version: APP_VERSION }));
 
   const staticDir =
     opts.staticDir === undefined ? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../client/dist') : opts.staticDir;
@@ -174,8 +174,8 @@ export async function startServer(opts: ServerOptions = {}) {
     const obj = (p: unknown): Record<string, unknown> => (p && typeof p === 'object' ? (p as Record<string, unknown>) : {});
 
     socket.on('room:create', handle((p: unknown) => {
-      const { name, solo, botCount } = obj(p);
-      const r = manager.create(playerId, String(name ?? ''));
+      const { name, solo, botCount, code } = obj(p);
+      const r = manager.create(playerId, String(name ?? ''), solo ? undefined : (code as string | undefined));
       if (solo) {
         const total = typeof botCount === 'number' ? Math.round(botCount) + 1 : 4;
         manager.fillBots(playerId, total);
