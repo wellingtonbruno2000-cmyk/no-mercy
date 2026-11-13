@@ -1,8 +1,8 @@
 import { motion } from 'framer-motion';
-import { Bot, BookOpen, Download, Share, DoorOpen, Loader2, Plus, Users, Wifi, WifiOff } from 'lucide-react';
+import { Bot, BookOpen, Download, RotateCcw, Share, DoorOpen, Loader2, Plus, Users, Wifi, WifiOff } from 'lucide-react';
 import { useState } from 'react';
 import { MAX_PLAYERS, MIN_PLAYERS, maxHandsFor } from '@nomercy/shared';
-import { getSavedName, saveName, send, useStore } from '../lib/store';
+import { discardSavedGame, getSavedName, resumeGame, saveName, send, useStore } from '../lib/store';
 import { FloatingCards } from './FloatingCards';
 import { BarAmbience } from './BarAmbience';
 import { Logo } from './Logo';
@@ -12,7 +12,7 @@ import { AudioButtons } from './AudioPanel';
 import { isIOS, promptInstall, useInstall } from '../lib/install';
 
 export function Home() {
-  const { connected } = useStore();
+  const { connected, savedGame, resuming } = useStore();
   const initialCode = new URLSearchParams(window.location.search).get('sala')?.toUpperCase() ?? '';
   const [name, setName] = useState(getSavedName());
   const [code, setCode] = useState(initialCode);
@@ -63,6 +63,20 @@ export function Home() {
               autoComplete="nickname"
             />
           </label>
+
+          {savedGame && (
+            <div className="rounded-2xl bg-gold/10 p-3 ring-1 ring-gold/40" data-testid="saved-game">
+              <button className="btn-gold w-full text-lg" disabled={!connected || resuming} onClick={() => void resumeGame(false)} data-testid="resume-game">
+                {resuming ? <Loader2 className="animate-spin" size={20} /> : <RotateCcw size={20} />} Voltar à partida
+              </button>
+              <p className="mt-1.5 text-center text-xs text-mist/70">
+                Sala {savedGame.code} · salva às {new Date(savedGame.t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} ·{' '}
+                <button className="underline hover:text-white" onClick={discardSavedGame}>
+                  descartar
+                </button>
+              </p>
+            </div>
+          )}
 
           <button className="btn-primary w-full text-lg" disabled={needName || busy} onClick={() => setMode('solo')}>
             <Bot size={22} /> Jogar contra bots

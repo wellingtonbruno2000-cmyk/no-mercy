@@ -1,4 +1,4 @@
-import { randomBytes, randomInt as cryptoRandomInt } from 'node:crypto';
+import { randomInt as cryptoRandomInt } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { createServer as createHttpServer } from 'node:http';
 import path from 'node:path';
@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { Server, type Socket } from 'socket.io';
 import { GameError, type Ack, type ClientToServerEvents, type ServerToClientEvents } from '@nomercy/shared';
-import { DEFAULT_TIMINGS, RoomError, RoomManager, type Timings } from './rooms';
+import { DEFAULT_TIMINGS, RoomError, RoomManager, type Room, type SavedRoom, type Timings } from './rooms';
+import { open as openSnapshot, playerIdFromToken, seal } from './snapshot';
 
 type IO = Server<ClientToServerEvents, ServerToClientEvents>;
 type ClientSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -96,10 +97,27 @@ export async function startServer(opts: ServerOptions = {}) {
     cors: { origin: process.env.CORS_ORIGIN?.split(',') ?? true },
     pingInterval: 10_000,
     pingTimeout: 8_000,
+    maxHttpBufferSize: 4_000_000,
   });
 
-  /** token secreto do cliente -> id público do jogador */
-  const sessions = new Map<string, string>();
+  // Cópia de segurança criptografada enviada aos jogadores (no máximo a cada 1,5 s por sala).
+  const snapTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const sendSnapshot = (room: Room) => {
+    if (room.status !== 'PLAYING' || snapTimers.has(room.code)) return;
+    snapTimers.set(
+      room.code,
+      setTimeout(() => {
+        snapTimers.delete(room.code);
+        const live = manager.rooms.get(room.code);
+        if (!live || live.status !== 'PLAYING') return;
+        const data = seal(manager.exportRoom(live));
+        for (const m of live.members) {
+          if (m.isBot || manager.playerRoom.get(m.id) !== live.code) continue;
+          io.to(`p:${m.id}`).emit('room:snapshot', { code: live.code, data });
+        }
+      }, 1500),
+    );
+  };
 
   const manager = new RoomManager(
     {
@@ -108,6 +126,7 @@ export async function startServer(opts: ServerOptions = {}) {
           if (m.isBot || manager.playerRoom.get(m.id) !== room.code) continue;
           io.to(`p:${m.id}`).emit('room:update', manager.viewFor(room, m.id));
         }
+        sendSnapshot(room);
       },
       onClosed(_room, ids, reason) {
         for (const id of ids) io.to(`p:${id}`).emit('room:closed', { reason });
@@ -122,12 +141,8 @@ export async function startServer(opts: ServerOptions = {}) {
     if (typeof token !== 'string' || token.length < 16 || token.length > 128) {
       return next(new Error('Sessão inválida'));
     }
-    let playerId = sessions.get(token);
-    if (!playerId) {
-      playerId = `p_${randomBytes(9).toString('base64url')}`;
-      sessions.set(token, playerId);
-    }
-    socket.data.playerId = playerId;
+    // Id estável: o mesmo navegador continua sendo o mesmo jogador mesmo depois de o servidor reiniciar.
+    socket.data.playerId = playerIdFromToken(token);
     next();
   });
 
@@ -192,6 +207,21 @@ export async function startServer(opts: ServerOptions = {}) {
       manager.play(playerId, cardId as string, mode);
     }) as never);
     socket.on('game:rematch', handle(() => manager.rematch(playerId)) as never);
+
+    // Retomar: ao reconectar, o navegador pergunta se ainda está numa sala; se o servidor reiniciou,
+    // devolve a cópia de segurança e a partida continua de onde parou.
+    socket.on('room:resume', handle((p: unknown) => {
+      const current = manager.roomOf(playerId);
+      if (current) {
+        manager.setConnected(playerId, true);
+        return { code: current.code, restored: false };
+      }
+      const saved = openSnapshot<SavedRoom>(obj(p).snapshot);
+      const room = saved ? manager.restoreRoom(saved, playerId) : null;
+      if (!room) throw new RoomError('A partida anterior não pôde ser retomada.');
+      console.log(`[sala ${room.code}] partida retomada após reinício do servidor`);
+      return { code: room.code, restored: true };
+    }) as never);
 
     // ---- Movimento do mouse (cabeça do boneco no multiplayer): só repassa, com limite de frequência.
     let lastLook = 0;

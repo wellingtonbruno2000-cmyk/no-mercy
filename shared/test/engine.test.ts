@@ -13,6 +13,8 @@ import {
   getPlayerView,
   isHiddenCard,
   maxHandsFor,
+  riffle,
+  tableShuffle,
   placeBid,
   playCard,
   scoreFor,
@@ -63,6 +65,28 @@ describe('baralho', () => {
     expect(s).toHaveLength(55);
     expect(new Set(s.map((d) => d.id)).size).toBe(55);
     expect(s.map((d) => d.id)).not.toEqual(createDeck().map((d) => d.id));
+  });
+
+  it('riffle e embaralhamento de mesa preservam as 55 cartas', () => {
+    const r = riffle(createDeck(), seeded(2));
+    expect(r).toHaveLength(55);
+    expect(new Set(r.map((c) => c.id)).size).toBe(55);
+    const t = tableShuffle(createDeck(), seeded(3));
+    expect(new Set(t.map((c) => c.id)).size).toBe(55);
+  });
+
+  it('embaralhamento de mesa: cada carta cai em qualquer posição com a mesma chance', () => {
+    const N = 20000;
+    const pos0 = new Map<string, number>();
+    const rng = (m: number) => Math.floor(Math.random() * m);
+    for (let i = 0; i < N; i++) {
+      const id = tableShuffle(createDeck(), rng)[0].id;
+      pos0.set(id, (pos0.get(id) ?? 0) + 1);
+    }
+    const mean = N / 55;
+    const chi = [...pos0.values()].reduce((a, v) => a + (v - mean) ** 2 / mean, 0);
+    expect(pos0.size).toBe(55);
+    expect(chi).toBeLessThan(95);
   });
 
   it('quantidade de partidas por jogadores', () => {
@@ -275,6 +299,26 @@ describe('partida às cegas e privacidade', () => {
     expect(g.phase).toBe('HAND_RESULT');
     expect(g.lastHandResult!.points).toEqual({ p1: 11, p2: 0, p3: 10, p0: 10 });
     expect(g.scores).toEqual({ p0: 10, p1: 11, p2: 0, p3: 10 });
+  });
+
+  it('as mãos distribuídas só são reveladas depois que a partida termina', () => {
+    let g = createGame(players(4), { startDealerSeat: 0, randomInt: seeded(31) });
+    g = bidAll(g);
+    g = advance(g);
+    g = advance(g); // partida 2 em andamento
+    const v = getPlayerView(g, 'p0') as unknown as Record<string, unknown>;
+    expect(v.dealt).toBeUndefined();
+    const others = ['p1', 'p2', 'p3'].flatMap((id) => g.hands[id].map((x) => x.id));
+    const json = JSON.stringify({ ...v, handHistory: [], lastHandResult: null, lastRound: null });
+    for (const id of others) expect(json).not.toContain(`"${id}"`);
+    // terminada a partida, o registro mostra o que cada um recebeu
+    const hand2 = structuredClone(g.hands);
+    g = bidAll(g);
+    while (g.phase !== 'HAND_RESULT') {
+      if (g.phase === 'ROUND_RESULT') g = advance(g);
+      else { const id = currentActorId(g)!; const c = g.hands[id][0]; g = playCard(g, id, c.id, c.value === 'JOKER' ? 'MAX' : null); }
+    }
+    expect(g.lastHandResult!.dealt).toEqual(hand2);
   });
 
   it('em partidas normais adversários são só contagem', () => {

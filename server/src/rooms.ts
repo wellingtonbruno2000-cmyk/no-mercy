@@ -58,6 +58,18 @@ export interface Room {
   botCounter: number;
 }
 
+export interface SavedRoom {
+  v: 1;
+  savedAt: number;
+  code: string;
+  hostId: string;
+  members: RoomPlayer[];
+  settings: RoomSettings;
+  status: RoomStatus;
+  game: GameState | null;
+  botCounter: number;
+}
+
 export interface RoomHooks {
   onChange(room: Room): void;
   onClosed(room: Room, playerIds: string[], reason: string): void;
@@ -474,6 +486,63 @@ export class RoomManager {
         room.game = playCard(game, actorId, card.id, card.value === 'JOKER' ? 'MAX' : null);
       }
     }
+  }
+
+  /** Dados da sala para a cópia de segurança (sem temporizadores). */
+  exportRoom(room: Room): SavedRoom {
+    return {
+      v: 1,
+      savedAt: Date.now(),
+      code: room.code,
+      hostId: room.hostId,
+      members: room.members.map((m) => ({ ...m })),
+      settings: { ...room.settings },
+      status: room.status,
+      game: room.game,
+      botCounter: room.botCounter,
+    };
+  }
+
+  /**
+   * Recria uma sala a partir da cópia de segurança devolvida por um jogador (após o servidor reiniciar).
+   * Retorna a sala (nova ou já existente) se o jogador fizer parte dela.
+   */
+  restoreRoom(saved: SavedRoom, playerId: string): Room | null {
+    if (!saved || saved.v !== 1 || !saved.game || saved.status !== 'PLAYING') return null;
+    if (Date.now() - saved.savedAt > 12 * 60 * 60 * 1000) return null; // cópias com mais de 12 h expiram
+    const member = saved.members.find((m) => m.id === playerId && !m.isBot);
+    if (!member || member.autopilot) return null;
+    const existing = this.rooms.get(saved.code);
+    if (existing) {
+      // Outro jogador já restaurou: só reconecta este.
+      if (!existing.members.some((m) => m.id === playerId)) return null;
+      this.playerRoom.set(playerId, existing.code);
+      this.setConnected(playerId, true);
+      return existing;
+    }
+    if (this.roomOf(playerId)) return null;
+    const room: Room = {
+      code: saved.code,
+      hostId: saved.hostId,
+      members: saved.members.map((m) => ({
+        ...m,
+        connected: m.isBot || m.id === playerId,
+        voice: false,
+        micOn: false,
+      })),
+      settings: { ...saved.settings },
+      status: 'PLAYING',
+      game: saved.game,
+      timer: null,
+      deadline: null,
+      emptySince: null,
+      botCounter: saved.botCounter,
+    };
+    this.rooms.set(room.code, room);
+    for (const m of room.members) if (!m.isBot && !m.autopilot) this.playerRoom.set(m.id, room.code);
+    this.hooks.onChange(room);
+    this.schedule(room);
+    return room;
   }
 
   viewFor(room: Room, playerId: string): RoomView {

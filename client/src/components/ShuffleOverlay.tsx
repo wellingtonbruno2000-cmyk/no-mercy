@@ -21,7 +21,7 @@ export function ShuffleOverlay({ g, dealerName }: { g: PlayerView; dealerName: s
       {visible && (
         <motion.div
           key={key}
-          className="pointer-events-none fixed inset-0 z-[45] flex flex-col items-center justify-center gap-4"
+          className="pointer-events-none fixed inset-x-0 top-[16vh] z-[45] flex flex-col items-center gap-3"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

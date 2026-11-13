@@ -49,6 +49,44 @@ export function shuffle<T>(items: readonly T[], randomInt: RandomInt = defaultRa
   return a;
 }
 
+/**
+ * Embaralhada "riffle" como na mesa (modelo Gilbert–Shannon–Reeds): corta o baralho em dois montes
+ * (tamanho segue uma binomial, como uma pessoa real) e intercala as cartas, caindo de cada monte
+ * com probabilidade proporcional ao que resta nele.
+ */
+export function riffle<T>(items: readonly T[], randomInt: RandomInt = defaultRandomInt): T[] {
+  let k = 0;
+  for (let i = 0; i < items.length; i++) k += randomInt(2);
+  const left = items.slice(0, k);
+  const right = items.slice(k);
+  const out: T[] = [];
+  let l = 0;
+  let r = 0;
+  while (l < left.length || r < right.length) {
+    const remL = left.length - l;
+    const remR = right.length - r;
+    if (randomInt(remL + remR) < remL) out.push(left[l++]);
+    else out.push(right[r++]);
+  }
+  return out;
+}
+
+/** Corte: tira um monte de cima e coloca embaixo. */
+export function cutDeck<T>(items: readonly T[], randomInt: RandomInt = defaultRandomInt): T[] {
+  const cut = 1 + randomInt(items.length - 1);
+  return [...items.slice(cut), ...items.slice(0, cut)];
+}
+
+/**
+ * Embaralhamento completo "de mesa": mistura matemática (Fisher–Yates, já perfeitamente justa),
+ * seguida de 7 embaralhadas riffle e um corte — como um crupiê faria.
+ */
+export function tableShuffle<T>(items: readonly T[], randomInt: RandomInt = defaultRandomInt): T[] {
+  let deck = shuffle(items, randomInt);
+  for (let i = 0; i < 7; i++) deck = riffle(deck, randomInt);
+  return cutDeck(deck, randomInt);
+}
+
 /** Máximo de partidas do jogo para N jogadores. */
 export function maxHandsFor(playerCount: number): number {
   return Math.floor(DECK_SIZE / playerCount);

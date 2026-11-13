@@ -62,6 +62,8 @@ export interface ClientToServerEvents {
   'voice:signal': (p: { to: string; data: VoiceSignal }) => void;
   /** Para onde o jogador está olhando (posição do mouse, -1..1). Usado para mover a cabeça do boneco. */
   'game:look': (p: { x: number; y: number }) => void;
+  /** Ao reconectar: confirma a sala atual ou restaura a partida a partir da cópia de segurança. */
+  'room:resume': (p: { snapshot: string | null }, ack: Ack<{ code: string; restored: boolean }>) => void;
 }
 
 export interface ServerToClientEvents {
@@ -69,4 +71,6 @@ export interface ServerToClientEvents {
   'room:closed': (p: { reason: string }) => void;
   'voice:signal': (p: { from: string; data: VoiceSignal }) => void;
   'game:look': (p: { playerId: string; x: number; y: number }) => void;
+  /** Cópia de segurança criptografada da partida (o navegador só guarda e devolve). */
+  'room:snapshot': (p: { code: string; data: string }) => void;
 }
