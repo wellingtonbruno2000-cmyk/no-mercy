@@ -18,6 +18,12 @@ export interface AudioSettings {
   view3d: boolean;
   /** Segurar as próprias cartas em 3D (mesa 3D). */
   hand3d: boolean;
+  /** Frases engraçadas em balões. */
+  tauntsOn: boolean;
+  /** Narrar as frases com voz sintetizada. */
+  tauntVoiceOn: boolean;
+  /** Voz escolhida para o narrador (vazio = automática). */
+  narratorVoice: string;
 }
 
 const DEFAULTS: AudioSettings = {
@@ -32,6 +38,9 @@ const DEFAULTS: AudioSettings = {
   view3d: true,
   // Mãos 3D por padrão em computadores (mouse); no celular a mão 2D é mais legível.
   hand3d: typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: fine)').matches,
+  tauntsOn: true,
+  tauntVoiceOn: true,
+  narratorVoice: '',
 };
 
 function load(): AudioSettings {

@@ -1,7 +1,8 @@
-import { Headphones, Mic, MicOff, Music, PhoneOff, Settings2, Sparkles, Volume2, VolumeX } from 'lucide-react';
+import { Headphones, MessageCircle, Mic, MicOff, Music, PhoneOff, Settings2, Sparkles, Volume2, VolumeX } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { RoomView } from '@nomercy/shared';
 import { updateAudioSettings, useAudioSettings } from '../lib/audio';
+import { pickPhrase, speak, useNarratorVoices } from '../lib/taunts';
 import {
   changeMicDevice,
   joinVoice,
@@ -60,6 +61,7 @@ export function AudioPanel({ open, onClose, room }: { open: boolean; onClose: ()
   const s = useAudioSettings();
   const voice = useVoice();
   const devices = useDevices();
+  const voices = useNarratorVoices();
   const others = room?.players.filter((p) => !p.isBot && p.id !== room.you) ?? [];
   const voiceAvailable = !!room && others.length > 0;
 
@@ -159,6 +161,37 @@ export function AudioPanel({ open, onClose, room }: { open: boolean; onClose: ()
             <Toggle label="Música" on={s.musicOn} onChange={(v) => updateAudioSettings({ musicOn: v })} />
             <Slider label="Volume da música" value={s.musicVolume} disabled={!s.musicOn} onChange={(v) => updateAudioSettings({ musicVolume: v })} />
           </div>
+        </Row>
+
+        <Row icon={<MessageCircle size={18} className="text-gold" />} title="Frases engraçadas">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-mist/70">Balões com provocações ("Toma essa, pilantra!")</span>
+            <Toggle label="Frases engraçadas" on={s.tauntsOn} onChange={(v) => updateAudioSettings({ tauntsOn: v })} />
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-mist/70">Narrador falando as frases (voz do aparelho)</span>
+            <Toggle label="Narrador" on={s.tauntVoiceOn && s.tauntsOn} onChange={(v) => updateAudioSettings({ tauntVoiceOn: v })} />
+          </div>
+          {voices.length > 0 && (
+            <div className="flex items-center gap-2">
+              <select
+                className="min-w-0 flex-1 rounded-xl bg-black/40 px-3 py-2 text-sm text-white ring-1 ring-white/10"
+                value={s.narratorVoice}
+                onChange={(e) => updateAudioSettings({ narratorVoice: e.target.value })}
+                aria-label="Voz do narrador"
+              >
+                <option value="">Voz automática (melhor disponível)</option>
+                {voices.map((v) => (
+                  <option key={v.voiceURI} value={v.voiceURI}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
+              <button className="btn-ghost px-3 py-2 text-xs" onClick={() => speak(pickPhrase('handHit', String(Date.now())), 0)}>
+                Ouvir
+              </button>
+            </div>
+          )}
         </Row>
 
         <Row icon={<Sparkles size={18} className="text-violet-400" />} title="Efeitos sonoros">

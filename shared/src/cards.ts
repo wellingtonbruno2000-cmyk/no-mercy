@@ -12,7 +12,7 @@ export const COLOR_LABEL: Record<CardColor, string> = {
 };
 
 /** Versão do jogo (mostrada na tela inicial e em /health). */
-export const APP_VERSION = '1.3.0';
+export const APP_VERSION = '1.4.0';
 
 export const DECK_SIZE = 55;
 export const MIN_PLAYERS = 2;

@@ -39,6 +39,7 @@ import { CardBack, PlayingCard } from './PlayingCard';
 import { GameOver, HandResult, Scoreboard } from './Results';
 import { Rules } from './Rules';
 import { ShuffleOverlay } from './ShuffleOverlay';
+import { SpeechBubble } from './SpeechBubble';
 import { updateAudioSettings, useAudioSettings } from '../lib/audio';
 import { webglAvailable } from '../lib/webgl';
 
@@ -451,6 +452,7 @@ function Seat({
           <TrickPile count={won} size={compact ? 'xs' : 'sm'} />
         </div>
       )}
+      <SpeechBubble playerId={id} className="-top-9 left-1/2 -translate-x-1/2" />
       {played && g.phase === 'PLAYING' && (
         <span className="absolute -bottom-1.5 right-1 rounded-full bg-emerald-500 p-0.5 text-white">
           <Check size={10} />
@@ -679,7 +681,8 @@ function MyArea({
       }`}
     >
       <div className="mx-auto flex max-w-4xl items-center justify-between gap-2 pb-1">
-        <div className="flex items-center gap-2">
+        <div className="relative flex items-center gap-2">
+          <SpeechBubble playerId={g.you} className="-top-10 left-0" />
           <Avatar name={names.name(g.you)} seat={names.seat(g.you)} size="sm" />
           <div>
             <p className="text-sm font-bold text-white">

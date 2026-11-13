@@ -448,37 +448,51 @@ class Character {
     this.playStart = performance.now();
   }
 
+  /** Fala uma frase (balão maior, sem a batidinha na mesa). */
+  say(text: string, ms = 2600) {
+    this.showBubble(text, ms);
+  }
+
   /** Bate na mesa ao dar o palpite e mostra um balão com o valor. */
   startTap(text: string) {
     this.tapStart = performance.now();
+    this.showBubble(text, 1800);
+  }
+
+  private showBubble(text: string, ms: number) {
     if (!this.bubble) {
       this.bubble = new THREE.Sprite(new THREE.SpriteMaterial({ depthTest: false, transparent: true }));
       this.bubble.renderOrder = 11;
-      this.bubble.scale.set(0.34, 0.26, 1);
+      this.bubble.scale.set(0.5, 0.2, 1);
       this.bubble.position.set(0.32, 1.62, 0.1);
       this.group.add(this.bubble);
     }
-    const tex = canvasTex(256, 196, (g, w) => {
+    const tex = canvasTex(512, 204, (g, w) => {
       g.fillStyle = '#fbf3e4';
-      roundRect(g, 8, 8, w - 16, 140, 40);
+      roundRect(g, 8, 8, w - 16, 150, 44);
       g.fill();
       g.beginPath();
-      g.moveTo(60, 140);
-      g.lineTo(44, 188);
-      g.lineTo(100, 142);
+      g.moveTo(90, 150);
+      g.lineTo(70, 198);
+      g.lineTo(140, 154);
       g.fill();
       g.fillStyle = '#1a1008';
-      g.font = '900 96px Outfit, sans-serif';
       g.textAlign = 'center';
       g.textBaseline = 'middle';
-      g.fillText(text, w / 2, 82);
+      // Ajusta o tamanho da letra para caber (números grandes, frases menores)
+      let size = 110;
+      do {
+        g.font = `900 ${size}px Outfit, sans-serif`;
+        size -= 4;
+      } while (g.measureText(text).width > w - 50 && size > 30);
+      g.fillText(text, w / 2, 86);
     });
     const m = this.bubble.material as THREE.SpriteMaterial;
     m.map?.dispose();
     m.map = tex;
     m.needsUpdate = true;
     this.bubble.visible = true;
-    this.bubbleUntil = performance.now() + 1800;
+    this.bubbleUntil = performance.now() + ms;
   }
 
   setTag(s: SeatState) {
@@ -1108,6 +1122,16 @@ export class BarScene {
         this.trickCards.delete(id);
       }
     }
+  }
+
+  /** Mostra a frase de um adversário sobre o personagem dele. */
+  say(playerId: string, text: string, ms = 2600) {
+    const st = this.state;
+    if (!st) return;
+    const i = st.opponents.findIndex((o) => o.id === playerId);
+    if (i < 0 || i > 2) return;
+    const slot = (SLOTS[Math.min(st.opponents.length, 3)] ?? [])[i];
+    this.chars[slot - 1]?.say(text, ms);
   }
 
   /** Atualiza sua mão 3D (cartas seguradas na parte de baixo da visão). */

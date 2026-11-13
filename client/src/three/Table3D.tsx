@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { PlayerView, RoomView } from '@nomercy/shared';
 import { useVoice } from '../lib/voice';
 import { getLook } from '../lib/look';
+import { useBubbles } from '../lib/taunts';
 import { BarScene, type HandState, type Mood, type SceneState } from './BarScene';
 
 interface Props {
@@ -21,6 +22,8 @@ export default function Table3D({ g, room, onFail, onReady, hand, suspicious, on
   const ref = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<BarScene | null>(null);
   const voice = useVoice();
+  const bubbles = useBubbles();
+  const shown = useRef(new Set<number>());
   const cbRef = useRef({ onCardClick, onCardHover });
   cbRef.current = { onCardClick, onCardHover };
 
@@ -92,6 +95,14 @@ export default function Table3D({ g, room, onFail, onReady, hand, suspicious, on
   useEffect(() => {
     sceneRef.current?.setHand(hand);
   }, [hand]);
+
+  useEffect(() => {
+    for (const [id, b] of Object.entries(bubbles)) {
+      if (shown.current.has(b.key)) continue;
+      shown.current.add(b.key);
+      sceneRef.current?.say(id, b.text, Math.max(500, b.until - Date.now()));
+    }
+  }, [bubbles]);
 
   useEffect(() => {
     if (!hand.enabled) sceneRef.current?.setSuspicious(suspicious);

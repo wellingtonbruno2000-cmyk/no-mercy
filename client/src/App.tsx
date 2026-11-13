@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useStore } from './lib/store';
 import { useAudioSettings } from './lib/audio';
 import { useGameSounds } from './lib/useGameSounds';
+import { useTaunts } from './lib/useTaunts';
 import { applyVoiceOutput, syncVoiceWithRoom } from './lib/voice';
 import { Game } from './components/Game';
 import { Home } from './components/Home';
@@ -13,6 +14,7 @@ export default function App() {
   const { room, connected } = useStore();
   const audio = useAudioSettings();
   useGameSounds(room);
+  useTaunts(room);
   useEffect(() => syncVoiceWithRoom(room), [room]);
   useEffect(() => applyVoiceOutput(), [audio]);
   useEffect(() => {

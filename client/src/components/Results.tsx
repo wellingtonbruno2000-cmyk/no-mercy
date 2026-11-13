@@ -3,6 +3,7 @@ import { Check, ChevronDown, Crown, Dices, LogOut, Medal, RotateCcw, Swords, Tro
 import { useMemo, useState } from 'react';
 import { playPower, type Card, type HandRecord, type PlayerView, type RoomView } from '@nomercy/shared';
 import { PlayingCard } from './PlayingCard';
+import { useBubbles } from '../lib/taunts';
 import { useCountdown } from '../lib/hooks';
 import { leaveRoom, send } from '../lib/store';
 import { Avatar } from './Avatar';
@@ -10,6 +11,7 @@ import type { Names } from './Game';
 import { Modal } from './Modal';
 
 function ResultTable({ rec, g, names }: { rec: HandRecord; g: PlayerView; names: Names }) {
+  const bubbles = useBubbles();
   const order = g.players.map((p) => p.id).filter((id) => rec.participants.includes(id));
   return (
     <div className="overflow-hidden rounded-2xl ring-1 ring-white/10">
@@ -40,6 +42,7 @@ function ResultTable({ rec, g, names }: { rec: HandRecord; g: PlayerView; names:
                     <Avatar name={names.name(id)} seat={names.seat(id)} size="sm" />
                     <span className="truncate">{id === g.you ? 'Você' : names.name(id)}</span>
                   </span>
+                  {bubbles[id] && <span className="mt-0.5 block text-[11px] font-bold italic text-gold">“{bubbles[id].text}”</span>}
                 </td>
                 <td className="px-2 py-2 text-center font-bold">{rec.bids[id]}</td>
                 <td className="px-2 py-2 text-center font-bold">{rec.tricks[id]}</td>
