@@ -120,6 +120,23 @@ export function BluffGame({ room }: { room: RoomView }) {
     const t = setTimeout(() => setHitFlash(false), 2600);
     return () => clearTimeout(t);
   }, [meHitKey]);
+  // Suspense antes do disparo: bordas escurecem pulsando no ritmo do coração
+  const [suspense, setSuspense] = useState<{ id: string; ms: number } | null>(null);
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ ms: number; id: string | null }>).detail;
+      if (t) clearTimeout(t);
+      if (!d.ms || !d.id) return setSuspense(null);
+      setSuspense({ id: d.id, ms: d.ms });
+      t = setTimeout(() => setSuspense(null), d.ms + 400);
+    };
+    window.addEventListener('nm:suspense', on);
+    return () => {
+      window.removeEventListener('nm:suspense', on);
+      if (t) clearTimeout(t);
+    };
+  }, []);
   const meIdx = b.players.findIndex((p) => p.id === b.you);
   const others = [...b.players.slice(meIdx + 1), ...b.players.slice(0, meIdx)];
   const myTurn = b.phase === 'TURN' && b.turnId === b.you;
@@ -390,6 +407,27 @@ export function BluffGame({ room }: { room: RoomView }) {
                 {shot && nextShooter && <p className="text-xs text-mist/70">Próximo: {n.name(nextShooter)}</p>}
               </>
             )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Suspense: vai sair o tiro ou não? */}
+      <AnimatePresence>
+        {suspense && (
+          <motion.div
+            key={suspense.id + suspense.ms}
+            data-testid="bluff-suspense"
+            className="pointer-events-none fixed inset-0 z-[44]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.15 } }}
+          >
+            <motion.div
+              className="absolute inset-0"
+              style={{ background: 'radial-gradient(ellipse at center, transparent 35%, rgba(60,0,0,.55) 75%, rgba(0,0,0,.85) 100%)' }}
+              animate={{ opacity: [0.55, 1, 0.6, 1, 0.65, 1, 0.7, 1] }}
+              transition={{ duration: suspense.ms / 1000, times: [0, 0.18, 0.34, 0.5, 0.63, 0.75, 0.86, 1] }}
+            />
           </motion.div>
         )}
       </AnimatePresence>

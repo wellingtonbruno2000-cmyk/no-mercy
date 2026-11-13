@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { claimText, type RoomView } from '@nomercy/shared';
-import { sfx } from './audio';
+import { engine, sfx } from './audio';
 import { pickPhrase, say, speak } from './taunts';
 
 const TABLE_PHRASE: Record<string, string> = {
@@ -9,6 +9,31 @@ const TABLE_PHRASE: Record<string, string> = {
   GREEN: 'A cor da mesa é verde',
   YELLOW: 'A cor da mesa é amarela',
 };
+
+// ---- Suspense antes de cada disparo (o servidor dispara ~3,4 s depois de começar a mira)
+const SUSPENSE_DELAY = 1550;
+const SUSPENSE_MS = 1700;
+let suspenseTimer: ReturnType<typeof setTimeout> | null = null;
+
+function emitSuspense(ms: number, id: string | null) {
+  window.dispatchEvent(new CustomEvent('nm:suspense', { detail: { ms, id } }));
+}
+
+function scheduleSuspense(id: string) {
+  if (suspenseTimer) clearTimeout(suspenseTimer);
+  suspenseTimer = setTimeout(() => {
+    suspenseTimer = null;
+    engine.suspense(SUSPENSE_MS / 1000);
+    emitSuspense(SUSPENSE_MS, id);
+  }, SUSPENSE_DELAY);
+}
+
+function endSuspense() {
+  if (suspenseTimer) clearTimeout(suspenseTimer);
+  suspenseTimer = null;
+  engine.cancelSuspense();
+  emitSuspense(0, null);
+}
 
 /** Modo Roleta: legendas (balões) e vozes para cada jogada, acusação e disparo. */
 export function useBluffVoices(room: RoomView | null) {
@@ -58,20 +83,22 @@ export function useBluffVoices(room: RoomView | null) {
     // Roleta começando
     if (b.phase === 'ROULETTE' && p.phase === 'REVEAL') {
       sfx('spin');
-      setTimeout(() => sfx('heartbeat'), 900);
       speak(pickPhrase('spin', key), 0, 'low');
+      if (b.shootQueue[0]) scheduleSuspense(b.shootQueue[0]);
     }
 
     // Disparo
     const shot = b.lastShot;
     if (shot && (!p.lastShot || p.lastShot.playerId !== shot.playerId || p.lastShot.pull !== shot.pull)) {
+      endSuspense();
+      if (b.phase === 'ROULETTE' && b.shootQueue[0]) scheduleSuspense(b.shootQueue[0]);
       if (shot.hit) {
         sfx('bang');
         const t = pickPhrase('out', `${key}-${shot.playerId}`);
         say(shot.playerId, 'FORA!', 3000);
         setTimeout(() => speak(t, 0, 'high'), 500);
       } else {
-        sfx('click');
+        sfx('trigger');
         const t = pickPhrase('survive', `${key}-${shot.playerId}-${shot.pull}`);
         say(shot.playerId, t, 2600);
         setTimeout(() => speak(t, voiceOf(shot.playerId), 'high'), 300);
@@ -84,5 +111,7 @@ export function useBluffVoices(room: RoomView | null) {
       sfx(b.winnerId === me ? 'gameWin' : 'gameOver');
       setTimeout(() => speak(t, voiceOf(b.winnerId!), 'high'), 800);
     }
+    if (b.phase !== 'ROULETTE' && p.phase === 'ROULETTE') endSuspense();
   }, [room]);
+  useEffect(() => () => endSuspense(), []);
 }

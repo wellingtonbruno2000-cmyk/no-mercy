@@ -97,7 +97,7 @@ export type Sfx =
   | 'join'
   | 'shuffle'
   | 'spin'
-  | 'click'
+  | 'trigger'
   | 'bang'
   | 'heartbeat'
   | 'lie';
@@ -181,6 +181,70 @@ class AudioEngine {
     g.connect(bus);
     osc.start(start);
     osc.stop(start + dur + release + 0.05);
+  }
+
+  private suspenseBus: GainNode | null = null;
+
+  /**
+   * Suspense antes do disparo (`dur` segundos): engatilhar, coração acelerando, tensão subindo e um
+   * silêncio no fim. A música abaixa. `cancelSuspense()` corta tudo na hora do resultado.
+   */
+  suspense(dur = 1.7) {
+    if (!this.ctx || !settings.sfxOn || settings.sfxVolume <= 0) return;
+    this.cancelSuspense();
+    const ctx = this.ctx;
+    const bus = ctx.createGain();
+    bus.connect(this.sfxBus);
+    this.suspenseBus = bus;
+    const t = ctx.currentTime + 0.01;
+    // engatilhando (cão puxado para trás: dois estalos)
+    this.noiseHit(bus, t, 0.03, { gain: 0.55, freq: 2600, q: 2 });
+    this.noiseHit(bus, t + 0.09, 0.04, { gain: 0.7, freq: 3400, q: 2.5 });
+    this.tone(bus, 2200, t + 0.09, 0.02, { type: 'triangle', gain: 0.06, release: 0.04 });
+    // coração acelerando
+    const end = t + dur - 0.25;
+    let beat = t + 0.25;
+    let gap = 0.42;
+    while (beat < end) {
+      this.tone(bus, 62, beat, 0.07, { gain: 0.45, slideTo: 40, release: 0.07 });
+      this.tone(bus, 56, beat + 0.15, 0.06, { gain: 0.3, slideTo: 38, release: 0.06 });
+      beat += gap;
+      gap = Math.max(0.24, gap * 0.82);
+    }
+    // tensão subindo (corda grave + agudo) até o silêncio
+    for (const [f0, f1, g] of [[110, 220, 0.05], [880, 1760, 0.018]] as const) {
+      const osc = ctx.createOscillator();
+      const gg = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(f0, t);
+      osc.frequency.exponentialRampToValueAtTime(f1, end);
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(400, t);
+      lp.frequency.exponentialRampToValueAtTime(3000, end);
+      gg.gain.setValueAtTime(0.0001, t);
+      gg.gain.exponentialRampToValueAtTime(g, end - 0.05);
+      gg.gain.exponentialRampToValueAtTime(0.0001, end + 0.04);
+      osc.connect(lp);
+      lp.connect(gg);
+      gg.connect(bus);
+      osc.start(t);
+      osc.stop(end + 0.1);
+    }
+    // música abaixa durante o suspense
+    if (this.musicBus) {
+      this.musicBus.gain.setTargetAtTime(settings.musicOn ? settings.musicVolume * 0.12 : 0, t, 0.15);
+      this.musicBus.gain.setTargetAtTime(settings.musicOn ? settings.musicVolume * 0.55 : 0, t + dur + 1.2, 0.6);
+    }
+  }
+
+  cancelSuspense() {
+    const bus = this.suspenseBus;
+    if (!bus || !this.ctx) return;
+    this.suspenseBus = null;
+    const t = this.ctx.currentTime;
+    bus.gain.setTargetAtTime(0, t, 0.02);
+    setTimeout(() => bus.disconnect(), 300);
   }
 
   private noiseHit(bus: AudioNode, start: number, dur: number, { gain = 0.2, freq = 2000, q = 1, type = 'bandpass' as BiquadFilterType } = {}) {
@@ -343,9 +407,13 @@ class AudioEngine {
           this.tone(b, 900, t + k * k * 1.1, 0.012, { type: 'square', gain: 0.03, release: 0.02 });
         }
         break;
-      case 'click':
-        this.noiseHit(b, t, 0.03, { gain: 0.5, freq: 2500, q: 2 });
-        this.tone(b, 1400, t, 0.015, { type: 'square', gain: 0.08, release: 0.02 });
+      case 'trigger':
+        // gatilho em falso: "clec" seco do cão batendo na câmara vazia + ressonância metálica curta
+        this.noiseHit(b, t, 0.025, { gain: 0.9, freq: 4200, q: 2.5 });
+        this.noiseHit(b, t, 0.06, { gain: 0.5, freq: 1600, q: 1.5 });
+        this.tone(b, 2900, t, 0.03, { type: 'triangle', gain: 0.12, release: 0.08 });
+        this.tone(b, 4100, t + 0.004, 0.02, { type: 'sine', gain: 0.06, release: 0.06 });
+        this.tone(b, 160, t, 0.03, { gain: 0.25, slideTo: 90, release: 0.04 });
         break;
       case 'bang':
         // estouro estilizado de desenho (sem realismo): pancada grave + chiado curto

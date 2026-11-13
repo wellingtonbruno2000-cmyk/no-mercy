@@ -1096,6 +1096,14 @@ export class BarScene {
   private camFlash: THREE.Object3D | null = null;
   private camDrum: THREE.Object3D | null = null;
   private tmpV = new THREE.Vector3();
+  private baseFov = 50;
+  private suspenseStart = 0;
+  private suspenseMs = 0;
+  private onSuspense = (e: Event) => {
+    const d = (e as CustomEvent<{ ms: number }>).detail;
+    this.suspenseStart = performance.now();
+    this.suspenseMs = d?.ms ?? 0;
+  };
   private seatsRoot: THREE.Group[] = [];
   private trickCards = new Map<string, { mesh: THREE.Mesh; target: THREE.Vector3; rot: number }>();
   private myPile = new THREE.Group();
@@ -1173,6 +1181,7 @@ export class BarScene {
     this.ro.observe(container);
     this.resize();
     document.addEventListener('visibilitychange', this.onVisibility);
+    window.addEventListener('nm:suspense', this.onSuspense);
     window.addEventListener('pointermove', this.onPointerMove);
     this.renderer.domElement.addEventListener('pointerdown', this.onPointerDown);
     window.addEventListener('pointerup', this.onPointerUp);
@@ -1450,11 +1459,11 @@ export class BarScene {
     const cam = this.camera;
     cam.aspect = w / h;
     if (this.portrait) {
-      cam.fov = 70;
+      cam.fov = this.baseFov = 70;
       cam.position.set(0, 2.7, 3.0);
       this.baseLook.set(0, 0.45, -0.5);
     } else {
-      cam.fov = 50;
+      cam.fov = this.baseFov = 50;
       cam.position.set(0, 2.05, 2.85);
       this.baseLook.set(0, 1.0, -0.45);
     }
@@ -1738,7 +1747,7 @@ export class BarScene {
     if (!this.hand.enabled) return;
     const cam = this.camera;
     const dist = 0.62;
-    const halfH = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)) * dist;
+    const halfH = Math.tan(THREE.MathUtils.degToRad(this.baseFov / 2)) * dist;
     const halfW = halfH * cam.aspect;
     const cards = this.handGroup.children.filter((c) => (c as THREE.Mesh).isMesh) as THREE.Mesh[];
     const n = cards.length;
@@ -1871,6 +1880,17 @@ export class BarScene {
     this.yaw += (this.yawT - this.yaw) * k;
     this.pitch += (this.pitchT - this.pitch) * k;
     this.applyCamera();
+    // Suspense: a câmera fecha devagar no momento do gatilho e volta rápido depois
+    {
+      const since = performance.now() - this.suspenseStart;
+      const sk = this.suspenseMs > 0 && since < this.suspenseMs ? THREE.MathUtils.smoothstep(since / this.suspenseMs, 0, 1) : 0;
+      const fov = this.baseFov * (1 - 0.13 * sk);
+      const cur = this.camera.fov + (fov - this.camera.fov) * (sk > 0 ? 0.2 : 0.12);
+      if (Math.abs(cur - this.camera.fov) > 0.01) {
+        this.camera.fov = cur;
+        this.camera.updateProjectionMatrix();
+      }
+    }
     // Tremor da câmera no seu disparo
     const shakeLeft = this.shakeUntil - performance.now();
     if (shakeLeft > 0) {
@@ -1935,6 +1955,7 @@ export class BarScene {
     cancelAnimationFrame(this.raf);
     this.ro.disconnect();
     document.removeEventListener('visibilitychange', this.onVisibility);
+    window.removeEventListener('nm:suspense', this.onSuspense);
     window.removeEventListener('pointermove', this.onPointerMove);
     window.removeEventListener('pointerup', this.onPointerUp);
     window.removeEventListener('pointercancel', this.onPointerUp);
