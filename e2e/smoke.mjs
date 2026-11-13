@@ -153,15 +153,14 @@ try {
   log('multiplayer iniciado (7 jogadores, 2 humanos)');
 
   // Chat de voz entre os dois navegadores (microfone falso do Chromium).
-  await host.locator('[data-testid=mic-button]').click();
-  await guest.locator('[data-testid=mic-button]').click();
+  // O chat de voz conecta sozinho (sem clicar) quando há outro jogador humano na sala.
   const voiceOk = async (pg) =>
     pg.waitForFunction(() => {
       const v = window.__voice;
       return v && [...v.peers.values()].some((p) => p.pc.connectionState === 'connected');
     }, null, { timeout: 20000 });
   await Promise.all([voiceOk(host), voiceOk(guest)]);
-  log('chat de voz conectado entre os dois jogadores');
+  log('chat de voz conectou sozinho entre os dois jogadores');
   await guest.locator('[data-testid=mic-button]').click(); // muta
   await host.waitForFunction(() => document.querySelector('[title="Microfone mudo"]'), null, { timeout: 5000 });
   log('mudo refletido para o outro jogador');

@@ -1,4 +1,4 @@
-import { Headphones, MessageCircle, Mic, MicOff, Music, PhoneOff, Settings2, Sparkles, Volume2, VolumeX } from 'lucide-react';
+import { Headphones, MessageCircle, Mic, MicOff, Music, Settings2, Sparkles, Volume2, VolumeX } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { RoomView } from '@nomercy/shared';
 import { updateAudioSettings, useAudioSettings } from '../lib/audio';
@@ -6,7 +6,6 @@ import { pickPhrase, speak, useNarratorVoices } from '../lib/taunts';
 import {
   changeMicDevice,
   joinVoice,
-  leaveVoice,
   refreshDevices,
   setMic,
   supportsOutputSelection,
@@ -77,23 +76,18 @@ export function AudioPanel({ open, onClose, room }: { open: boolean; onClose: ()
             <p className="text-xs text-mist/60">Disponível em salas com outros jogadores humanos.</p>
           ) : !voice.active ? (
             <button className="btn-primary w-full py-2.5 text-sm" disabled={voice.joining} onClick={() => void joinVoice()} data-testid="voice-join">
-              <Mic size={16} /> {voice.joining ? 'Conectando…' : 'Entrar no chat de voz'}
+              <Mic size={16} /> {voice.joining ? 'Conectando…' : 'Conectar o chat de voz'}
             </button>
           ) : (
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  className={`btn py-2.5 text-sm ${voice.micOn ? 'bg-emerald-600 text-white' : 'bg-rose-600/80 text-white'}`}
-                  onClick={() => void setMic(!voice.micOn)}
-                  data-testid="voice-mic"
-                >
-                  {voice.micOn ? <Mic size={16} /> : <MicOff size={16} />}
-                  {voice.micOn ? 'Microfone ligado' : 'Microfone mudo'}
-                </button>
-                <button className="btn-ghost py-2.5 text-sm" onClick={() => leaveVoice()}>
-                  <PhoneOff size={16} /> Sair da voz
-                </button>
-              </div>
+              <button
+                className={`btn w-full py-2.5 text-sm ${voice.micOn ? 'bg-emerald-600 text-white' : 'bg-rose-600/80 text-white'}`}
+                onClick={() => void setMic(!voice.micOn)}
+                data-testid="voice-mic"
+              >
+                {voice.micOn ? <Mic size={16} /> : <MicOff size={16} />}
+                {voice.micOn ? 'Microfone ligado (toque para mutar)' : 'Microfone mudo (toque para ligar)'}
+              </button>
               <p className="text-xs text-mist/60">
                 Na voz:{' '}
                 {room!.players

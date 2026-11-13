@@ -7,6 +7,10 @@ import { getAudioSettings } from './audio';
  */
 export const PHRASES = {
   roundWin: ['Toma!', 'É minha!', 'Essa é minha, hein!', 'Vem pro papai!', 'Pode vir!', 'Sem piedade!', 'Facinho!', 'Anota aí!'],
+  /** Narrador anunciando a sua vez (de vez em quando). */
+  yourTurn: ['Sua vez, parceiro.', 'Vai lá, mostra o que tem.', 'A mesa tá esperando.', 'E aí, vai de quê?'],
+  /** Narrador quando você perde a rodada para alguém. */
+  lostRound: ['Essa doeu.', 'Passou raspando.', 'Levaram a sua.', 'Ih, rapaz.'],
   handHit: [
     'Toma essa, pilantra!',
     'Na mosca, meu filho!',
@@ -130,10 +134,12 @@ export function useNarratorVoices(): SpeechSynthesisVoice[] {
 }
 
 /** Fala a frase. `voiceIndex` muda o tom para cada jogador parecer diferente. */
-export function speak(text: string, voiceIndex = 0) {
+export function speak(text: string, voiceIndex = 0, priority: 'low' | 'high' = 'high') {
   const s = getAudioSettings();
   if (!s.tauntsOn || !s.tauntVoiceOn || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
   try {
+    // Falas comuns (rodadas) não atropelam outra fala; as importantes (fim de partida) entram na fila.
+    if (priority === 'low' && (window.speechSynthesis.speaking || window.speechSynthesis.pending)) return;
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'pt-BR';
     const chosen = s.narratorVoice ? ptVoices.find((v) => v.voiceURI === s.narratorVoice) : undefined;

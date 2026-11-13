@@ -24,7 +24,16 @@ export function useTaunts(room: RoomView | null) {
       );
       const text = pickPhrase(beatStrong ? 'zoar' : 'roundWin', seed);
       say(w, text, 2400);
-      if (beatStrong && w === me) speak(text, 0); // você derrubou alguém: o narrador fala
+      // Vozes durante o jogo: quem venceu a rodada fala (cada jogador com um tom)
+      speak(text, w === me ? 0 : seat(w) + 1, beatStrong ? 'high' : 'low');
+    }
+
+    // Sua vez de jogar: o narrador chama de vez em quando (1 a cada 3 vezes, para não cansar)
+    const myTurn = g.phase === 'PLAYING' && g.currentPlayerId === me;
+    const wasMyTurn = before.phase === 'PLAYING' && before.currentPlayerId === me;
+    if (myTurn && !wasMyTurn) {
+      const seed = `${handKey}-${g.roundNumber}-turn`;
+      if (pickPhrase('zoar', seed).length % 3 === 0) speak(pickPhrase('yourTurn', seed), 0, 'low');
     }
 
     // Fim da partida: quem acertou provoca, quem errou reclama

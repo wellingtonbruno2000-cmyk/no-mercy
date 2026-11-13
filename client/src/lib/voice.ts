@@ -191,6 +191,29 @@ async function flushIce(peer: Peer) {
   for (const c of peer.pendingIce.splice(0)) await peer.pc.addIceCandidate(c).catch(() => undefined);
 }
 
+// Navegadores só tocam áudio depois de um toque/clique: ao primeiro gesto, garante que as vozes tocam.
+if (typeof window !== 'undefined') {
+  window.addEventListener(
+    'pointerdown',
+    () => {
+      for (const p of peers.values()) if (p.audio.paused && p.audio.srcObject) void p.audio.play().catch(() => undefined);
+    },
+    { capture: true },
+  );
+}
+
+/** Salas onde já tentamos entrar na voz automaticamente (não insiste se o usuário recusar o microfone). */
+const autoTried = new Set<string>();
+
+/** Entra na voz automaticamente quando há outros jogadores humanos na sala. */
+export function autoJoinVoice(room: RoomView | null) {
+  if (!room || state.active || state.joining || autoTried.has(room.code)) return;
+  const others = room.players.some((p) => !p.isBot && p.id !== room.you && p.connected);
+  if (!others) return;
+  autoTried.add(room.code);
+  void joinVoice();
+}
+
 socket.on('voice:signal', async ({ from, data }) => {
   if (!state.active) return;
   try {
@@ -312,8 +335,10 @@ export function applyVoiceOutput() {
 export function syncVoiceWithRoom(room: RoomView | null) {
   if (!room) {
     if (state.active) leaveVoice(false);
+    autoTried.clear();
     return;
   }
+  autoJoinVoice(room);
   myId = room.you;
   if (!state.active) return;
   const me = room.players.find((p) => p.id === room.you);
