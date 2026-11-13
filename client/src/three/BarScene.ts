@@ -191,6 +191,27 @@ function cardFaceTex(card: Card, mode: JokerMode | null): THREE.Texture {
   return t;
 }
 
+/** Revólver de desenho (original) para pôr sobre a mesa: cano, tambor, armação e cabo de madeira. */
+function makeRevolver(): THREE.Group {
+  const g = new THREE.Group();
+  const metal = new THREE.MeshStandardMaterial({ color: 0x2b2d33, metalness: 0.85, roughness: 0.35 });
+  const wood = new THREE.MeshStandardMaterial({ color: 0x5a3216, roughness: 0.6 });
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.15, 10), metal);
+  barrel.rotation.x = Math.PI / 2;
+  barrel.position.set(0, 0.025, 0.09);
+  const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.045, 12), metal);
+  drum.rotation.x = Math.PI / 2;
+  drum.position.set(0, 0.02, 0.015);
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.045, 0.06), metal);
+  frame.position.set(0, 0.015, 0);
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.075, 0.032), wood);
+  grip.position.set(0, -0.03, -0.025);
+  grip.rotation.x = -0.35;
+  g.add(barrel, drum, frame, grip);
+  g.traverse((m) => ((m as THREE.Mesh).isMesh ? ((m.castShadow = true), (m.receiveShadow = true)) : null));
+  return g;
+}
+
 let devilTexture: THREE.Texture | null = null;
 /** Carta do Diabo (modo Roleta): preta e vermelha, com chifres e tridente — desenho original. */
 function devilFaceTex(): THREE.Texture {
@@ -362,6 +383,15 @@ class Character {
   private reliefUntil = 0;
   /** Qual braço segura a arma (0 = direito, 1 = esquerdo): o do lado da câmera, para a arma aparecer. */
   private gunArm = 0;
+  /** Lado do revólver: -1 = direita do personagem (-x), +1 = esquerda. Fica do lado da câmera. */
+  private gunSide = -1;
+  /** 0 = revólver deitado na mesa, 1 = encostado na lateral da cabeça. */
+  private gunPose = 0;
+  private gunPoseTarget = 0;
+  private gunEnabled = false;
+  private pupils: THREE.Mesh[] = [];
+  private eyeX: THREE.Group[] = [];
+  private deadSince = 0;
 
   constructor(private look: Look) {
     const o = look;
@@ -416,6 +446,18 @@ class Character {
       eyeW.scale.z = 0.5;
       const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.016, 10, 10), mat(0x120a05, { roughness: 0.2 }));
       pupil.position.set(s * 0.062, 0.15, 0.158);
+      this.pupils.push(pupil);
+      // Olho em "X" (aparece quando o personagem é eliminado)
+      const xg = new THREE.Group();
+      for (const r of [0.785, -0.785]) {
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.009, 0.006), mat(0x120a05));
+        bar.rotation.z = r;
+        xg.add(bar);
+      }
+      xg.position.set(s * 0.062, 0.15, 0.162);
+      xg.visible = false;
+      hp.add(xg);
+      this.eyeX.push(xg);
       const brow = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.014, 0.02), mat(o.hair));
       brow.position.set(s * 0.062, 0.195, 0.155);
       brow.rotation.z = -s * o.brow;
@@ -547,10 +589,10 @@ class Character {
     this.smoke.scale.set(0.12, 0.12, 1);
     this.gun.add(this.flash, this.flashSprite, this.smoke);
     this.gun.visible = false;
-    // Na mão direita do personagem (lado -x, braço 0), apontando para a cabeça quando o braço sobe
-    this.gun.position.set(0.04, 0.0, 0.03);
-    this.gun.rotation.set(-1.2, 0, 1.4);
-    this.handMeshes[0].add(this.gun);
+    // Revólver maior e independente da mão: fica deitado na mesa e é levado até a lateral da cabeça.
+    this.gun.scale.setScalar(1.7);
+    this.group.add(this.gun);
+    this.placeGun(0);
 
     this.fan.position.set(0, 0.4, 0.45);
     this.body.add(this.fan);
@@ -573,19 +615,48 @@ class Character {
     });
   }
 
-  /** Levanta a arma até a cabeça e gira o tambor (antes do disparo). */
+  /** Escolhe o lado do revólver (o lado que a câmera vê) e mostra a arma na mesa. */
+  enableGun(camPos: THREE.Vector3) {
+    if (!this.gunEnabled) {
+      const left = this.group.localToWorld(new THREE.Vector3(0.3, 1, 0.4)).distanceTo(camPos);
+      const right = this.group.localToWorld(new THREE.Vector3(-0.3, 1, 0.4)).distanceTo(camPos);
+      this.gunSide = left < right - 0.02 ? 1 : -1;
+      this.gunArm = this.gunSide === -1 ? 0 : 1;
+      this.gunEnabled = true;
+    }
+    this.gun.visible = true;
+  }
+
+  disableGun() {
+    this.gunEnabled = false;
+    this.gun.visible = false;
+  }
+
+  /**
+   * Posição do revólver entre a mesa (0) e a cabeça (1), no espaço do personagem.
+   * Na cabeça, o cano encosta por FORA na têmpora (não atravessa a cabeça).
+   */
+  private placeGun(t: number, recoil = 0) {
+    const side = this.gunSide;
+    const table = new THREE.Vector3(side * 0.32, 0.86, 0.62);
+    const head = new THREE.Vector3(side * (0.47 + recoil * 0.05), 1.53, 0.05);
+    const k = t * t * (3 - 2 * t); // suave
+    // arco: sobe por cima, em vez de atravessar o corpo
+    const pos = table.clone().lerp(head, k);
+    pos.y += Math.sin(k * Math.PI) * 0.12;
+    this.gun.position.copy(pos);
+    const qTable = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, side * 0.6, side * (Math.PI / 2)));
+    // cano (eixo +z do revólver) apontando para a cabeça: vira para -side·x, com leve inclinação
+    const qHead = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.1 - recoil * 0.4, -side * (Math.PI / 2), 0));
+    this.gun.quaternion.copy(qTable).slerp(qHead, k);
+  }
+
+  /** Pega o revólver da mesa, leva até a cabeça e gira o tambor (antes do disparo). */
   aim(camPos?: THREE.Vector3) {
     if (this.dead) return;
-    if (camPos) {
-      const d0 = this.handMeshes[0].getWorldPosition(new THREE.Vector3()).distanceTo(camPos);
-      const d1 = this.handMeshes[1].getWorldPosition(new THREE.Vector3()).distanceTo(camPos);
-      this.gunArm = d1 < d0 - 0.02 ? 1 : 0;
-    }
-    const sgn = this.gunArm === 0 ? 1 : -1;
-    this.handMeshes[this.gunArm].add(this.gun);
-    this.gun.position.set(0.04 * sgn, 0, 0.03);
-    this.gun.rotation.set(-1.2, 0, 1.4 * sgn);
+    if (camPos) this.enableGun(camPos);
     this.gun.visible = true;
+    this.gunPoseTarget = 1;
     this.aimStart = performance.now();
     this.fireAt = -1;
   }
@@ -594,19 +665,25 @@ class Character {
   fire(hit: boolean, camPos?: THREE.Vector3) {
     if (this.aimStart < 0) this.aim(camPos);
     this.fireAt = performance.now();
-    if (hit) setTimeout(() => (this.dead = true), 90);
+    if (hit) setTimeout(() => this.setDead(true), 90);
     else this.reliefUntil = performance.now() + 2200;
   }
 
-  /** Guarda a arma (fim da roleta para este personagem). */
+  /** Devolve o revólver para a mesa. */
   lower() {
     this.aimStart = -1;
-    this.gun.visible = false;
+    this.gunPoseTarget = 0;
   }
 
   setDead(d: boolean) {
+    if (d && !this.dead) this.deadSince = performance.now();
     this.dead = d;
-    if (!d) this.group.rotation.x = 0;
+    for (const p of this.pupils) p.visible = !d;
+    for (const x of this.eyeX) x.visible = d;
+    if (!d) {
+      this.group.rotation.x = 0;
+      this.head.rotation.z = 0;
+    }
   }
 
   headAngles() {
@@ -815,16 +892,23 @@ class Character {
     // ---- Roleta: mira, tambor, disparo, alívio e queda
     let armZ0 = 0;
     const ga = this.gunArm;
+    // revólver: da mesa até a cabeça (e de volta)
+    this.gunPose += (this.gunPoseTarget - this.gunPose) * 0.09;
+    const recoilAmt = this.fireAt > 0 && now - this.fireAt < 160 ? 1 - (now - this.fireAt) / 160 : 0;
+    if (this.gun.visible) this.placeGun(this.dead ? 0 : this.gunPose, recoilAmt);
+    if (this.gunPose > 0.05 && !this.dead) {
+      // braço sobe junto com o revólver, aberto para o lado
+      armX[ga] = -2.0 * this.gunPose;
+      armZ0 = (ga === 0 ? -0.75 : 0.75) * this.gunPose;
+    }
     if (this.aimStart > 0 && !this.dead) {
-      armX[ga] = -2.45; // braço sobe até a cabeça
-      armZ0 = ga === 0 ? 0.55 : -0.55;
-      yaw = ga === 0 ? 0.25 : -0.25;
+      yaw = -this.gunSide * 0.3; // vira o rosto para o lado oposto à arma
       pitch = -0.05;
       const since = now - this.aimStart;
       if (this.gunDrum && since < 1300 && this.fireAt < 0) this.gunDrum.rotation.y += 0.6 * (1 - since / 1300); // tambor girando
       if (this.fireAt > 0) {
         const f = now - this.fireAt;
-        armX[ga] += f < 120 ? -0.35 * (1 - f / 120) : 0; // tranco
+        armX[ga] += f < 120 ? -0.25 * (1 - f / 120) : 0; // tranco
         this.flash.intensity = f < 110 ? 9 * (1 - f / 110) : 0;
         this.flashSprite.visible = f < 70;
         const sm = this.smoke.material as THREE.SpriteMaterial;
@@ -838,12 +922,18 @@ class Character {
       pitch = -0.25;
     }
     if (this.dead) {
-      this.group.rotation.x = THREE.MathUtils.lerp(this.group.rotation.x, -1.15, 0.08); // cai para trás com a cadeira
+      const since = now - this.deadSince;
+      // solavanco no impacto, depois cai para trás com a cadeira e fica
+      const jolt = since < 180 ? Math.sin((since / 180) * Math.PI) * 0.25 : 0;
+      this.group.rotation.x = THREE.MathUtils.lerp(this.group.rotation.x, -1.15, since < 180 ? 0.02 : 0.07) + jolt * 0.1;
+      this.head.rotation.z = THREE.MathUtils.lerp(this.head.rotation.z, this.gunSide * 0.6, 0.06); // cabeça tomba
       this.flash.intensity = 0;
       this.flashSprite.visible = false;
-      armX[0] = 0.4;
-      armX[1] = 0.4;
-      pitch = -0.4;
+      armX[0] = 0.9; // braços soltos
+      armX[1] = 0.9;
+      pitch = -0.45;
+      yaw = this.gunSide * 0.2;
+      bodyX = -0.05;
     } else this.group.rotation.x = THREE.MathUtils.lerp(this.group.rotation.x, 0, 0.12);
     let idle = Math.sin(t * 0.9 + this.phase) * 0.03;
     let idleYaw = Math.sin(t * 0.5 + this.phase) * 0.04;
@@ -918,6 +1008,7 @@ export class BarScene {
   private shakeUntil = 0;
   private lastShotKey = '';
   private lastAiming: string | null = null;
+  private myTableGun: THREE.Group | null = null;
   private prevBids = new Map<string, number | null>();
   // Qualidade adaptativa
   private quality = 2;
@@ -1438,6 +1529,17 @@ export class BarScene {
         this.pile.add(m);
       });
     }
+
+    // Revólver na mesa ao lado de cada jogador (inclusive o seu)
+    for (const o of this.state?.opponents ?? []) this.charById(o.id)?.enableGun(this.camera.position);
+    if (!this.myTableGun) {
+      this.myTableGun = makeRevolver();
+      this.myTableGun.scale.setScalar(1.7);
+      this.myTableGun.position.set(0.5, 0.86, this.portrait ? 0.55 : 0.82);
+      this.myTableGun.rotation.set(0, -0.5, Math.PI / 2);
+      this.scene.add(this.myTableGun);
+    }
+    this.myTableGun.visible = !b.out.includes(b.meId) && this.camGunState !== 'aim';
 
     // Quem saiu do jogo fica caído
     for (const o of this.state?.opponents ?? []) this.charById(o.id)?.setDead(b.out.includes(o.id));

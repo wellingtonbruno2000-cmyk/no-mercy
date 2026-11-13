@@ -183,6 +183,11 @@ export function BluffGame({ room }: { room: RoomView }) {
           </span>
           <span className="chip bg-white/10 text-mist">Rodada {b.round}</span>
           {b.special && <span className="chip bg-red-950/80 text-red-200">Carta do Diabo ativa</span>}
+          {!b.alive[b.you] && b.phase !== 'GAME_OVER' && (
+            <span className="chip bg-white/15 text-white" data-testid="spectator">
+              <Skull size={12} /> Espectador — você volta na revanche
+            </span>
+          )}
         </div>
         {can3d && (
           <button
