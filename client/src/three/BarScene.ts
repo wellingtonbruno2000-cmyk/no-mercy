@@ -22,6 +22,25 @@ export interface SeatState {
   offline: boolean;
   /** Jogador humano: a cabeça do boneco segue o mouse dessa pessoa (multiplayer). */
   human: boolean;
+  /** Linha de informação alternativa na placa (ex.: modo Roleta: "🔫 2/6 · 3 cartas"). */
+  subtitle?: string;
+  /** Fora do jogo (modo Roleta). */
+  out?: boolean;
+}
+
+/** Estado extra do modo Roleta Sem Piedade na cena 3D. */
+export interface BluffSceneState {
+  meId: string;
+  tableColor: Card['color'];
+  /** Cartas viradas na mesa (última jogada). */
+  pileCount: number;
+  /** Revelação: cartas da jogada acusada (com a Carta do Diabo destacada). */
+  reveal: Card[] | null;
+  /** Quem está com a arma levantada esperando o disparo. */
+  aiming: string | null;
+  /** Último disparo (key muda a cada novo disparo). */
+  shot: { id: string; hit: boolean; key: string } | null;
+  out: string[];
 }
 
 export type Mood = 'win' | 'lose' | null;
@@ -172,6 +191,56 @@ function cardFaceTex(card: Card, mode: JokerMode | null): THREE.Texture {
   return t;
 }
 
+let devilTexture: THREE.Texture | null = null;
+/** Carta do Diabo (modo Roleta): preta e vermelha, com chifres e tridente — desenho original. */
+function devilFaceTex(): THREE.Texture {
+  if (devilTexture) return devilTexture;
+  devilTexture = canvasTex(256, 360, (g, w, h) => {
+    const gr = g.createLinearGradient(0, 0, w, h);
+    gr.addColorStop(0, '#3a0606');
+    gr.addColorStop(1, '#000000');
+    g.fillStyle = gr;
+    roundRect(g, 0, 0, w, h, 28);
+    g.fill();
+    g.strokeStyle = '#ff4040';
+    g.lineWidth = 6;
+    roundRect(g, 10, 10, w - 20, h - 20, 20);
+    g.stroke();
+    g.fillStyle = '#ff3b3b';
+    g.beginPath();
+    g.moveTo(70, 120);
+    g.quadraticCurveTo(40, 60, 70, 30);
+    g.quadraticCurveTo(80, 90, 105, 110);
+    g.fill();
+    g.beginPath();
+    g.moveTo(186, 120);
+    g.quadraticCurveTo(216, 60, 186, 30);
+    g.quadraticCurveTo(176, 90, 151, 110);
+    g.fill();
+    g.strokeStyle = '#ffcf6b';
+    g.lineWidth = 9;
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(128, 110);
+    g.lineTo(128, 300);
+    g.moveTo(88, 140);
+    g.quadraticCurveTo(88, 190, 128, 190);
+    g.quadraticCurveTo(168, 190, 168, 140);
+    g.moveTo(88, 140);
+    g.lineTo(80, 118);
+    g.moveTo(128, 110);
+    g.lineTo(128, 86);
+    g.moveTo(168, 140);
+    g.lineTo(176, 118);
+    g.stroke();
+    g.fillStyle = '#ff9a9a';
+    g.font = 'bold 34px Outfit, sans-serif';
+    g.textAlign = 'center';
+    g.fillText('DIABO', w / 2, 338);
+  });
+  return devilTexture;
+}
+
 let backTexture: THREE.Texture | null = null;
 function cardBackTex(): THREE.Texture {
   if (backTexture) return backTexture;
@@ -281,6 +350,18 @@ class Character {
   private tapStart = -1;
   private bubble: THREE.Sprite | null = null;
   private bubbleUntil = 0;
+  // ---- Modo Roleta: revólver, mira, disparo e queda
+  private gun = new THREE.Group();
+  private gunDrum: THREE.Mesh | null = null;
+  private flash: THREE.PointLight;
+  private flashSprite: THREE.Sprite;
+  private smoke: THREE.Sprite;
+  private aimStart = -1;
+  private fireAt = -1;
+  private dead = false;
+  private reliefUntil = 0;
+  /** Qual braço segura a arma (0 = direito, 1 = esquerdo): o do lado da câmera, para a arma aparecer. */
+  private gunArm = 0;
 
   constructor(private look: Look) {
     const o = look;
@@ -413,6 +494,64 @@ class Character {
       this.arms.push(shoulder);
       this.handMeshes.push(hand);
     }
+    // Revólver de desenho (original): cano, tambor, armação e cabo de madeira
+    const metal = new THREE.MeshStandardMaterial({ color: 0x2b2d33, metalness: 0.85, roughness: 0.35 });
+    const wood2 = new THREE.MeshStandardMaterial({ color: 0x5a3216, roughness: 0.6 });
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.15, 10), metal);
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.set(0, 0.025, 0.09);
+    const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.045, 12), metal);
+    drum.rotation.x = Math.PI / 2;
+    drum.position.set(0, 0.02, 0.015);
+    this.gunDrum = drum;
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.045, 0.06), metal);
+    frame.position.set(0, 0.015, 0);
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.075, 0.032), wood2);
+    grip.position.set(0, -0.03, -0.025);
+    grip.rotation.x = -0.35;
+    this.gun.add(barrel, drum, frame, grip);
+    this.flash = new THREE.PointLight(0xffb347, 0, 2.2);
+    this.flash.position.set(0, 0.025, 0.18);
+    this.flashSprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        map: canvasTex(128, 128, (g, w, h) => {
+          const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+          gr.addColorStop(0, 'rgba(255,255,220,1)');
+          gr.addColorStop(0.3, 'rgba(255,190,70,.9)');
+          gr.addColorStop(1, 'rgba(255,120,0,0)');
+          g.fillStyle = gr;
+          g.fillRect(0, 0, w, h);
+        }),
+      }),
+    );
+    this.flashSprite.scale.set(0.16, 0.16, 1);
+    this.flashSprite.position.set(0, 0.025, 0.19);
+    this.flashSprite.visible = false;
+    this.smoke = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        transparent: true,
+        depthWrite: false,
+        opacity: 0,
+        map: canvasTex(64, 64, (g, w, h) => {
+          const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+          gr.addColorStop(0, 'rgba(210,210,210,.8)');
+          gr.addColorStop(1, 'rgba(210,210,210,0)');
+          g.fillStyle = gr;
+          g.fillRect(0, 0, w, h);
+        }),
+      }),
+    );
+    this.smoke.scale.set(0.12, 0.12, 1);
+    this.gun.add(this.flash, this.flashSprite, this.smoke);
+    this.gun.visible = false;
+    // Na mão direita do personagem (lado -x, braço 0), apontando para a cabeça quando o braço sobe
+    this.gun.position.set(0.04, 0.0, 0.03);
+    this.gun.rotation.set(-1.2, 0, 1.4);
+    this.handMeshes[0].add(this.gun);
+
     this.fan.position.set(0, 0.4, 0.45);
     this.body.add(this.fan);
     this.group.add(this.pile);
@@ -432,6 +571,42 @@ class Character {
       mesh.castShadow = r > 0.09;
       mesh.receiveShadow = r > 0.09;
     });
+  }
+
+  /** Levanta a arma até a cabeça e gira o tambor (antes do disparo). */
+  aim(camPos?: THREE.Vector3) {
+    if (this.dead) return;
+    if (camPos) {
+      const d0 = this.handMeshes[0].getWorldPosition(new THREE.Vector3()).distanceTo(camPos);
+      const d1 = this.handMeshes[1].getWorldPosition(new THREE.Vector3()).distanceTo(camPos);
+      this.gunArm = d1 < d0 - 0.02 ? 1 : 0;
+    }
+    const sgn = this.gunArm === 0 ? 1 : -1;
+    this.handMeshes[this.gunArm].add(this.gun);
+    this.gun.position.set(0.04 * sgn, 0, 0.03);
+    this.gun.rotation.set(-1.2, 0, 1.4 * sgn);
+    this.gun.visible = true;
+    this.aimStart = performance.now();
+    this.fireAt = -1;
+  }
+
+  /** Dispara: clarão, fumaça e tranco. Se `hit`, o personagem cai para trás com a cadeira. */
+  fire(hit: boolean, camPos?: THREE.Vector3) {
+    if (this.aimStart < 0) this.aim(camPos);
+    this.fireAt = performance.now();
+    if (hit) setTimeout(() => (this.dead = true), 90);
+    else this.reliefUntil = performance.now() + 2200;
+  }
+
+  /** Guarda a arma (fim da roleta para este personagem). */
+  lower() {
+    this.aimStart = -1;
+    this.gun.visible = false;
+  }
+
+  setDead(d: boolean) {
+    this.dead = d;
+    if (!d) this.group.rotation.x = 0;
   }
 
   headAngles() {
@@ -496,7 +671,7 @@ class Character {
   }
 
   setTag(s: SeatState) {
-    const key = JSON.stringify([s.name, s.pts, s.bid, s.won, s.active, s.speaking, s.offline, s.participant]);
+    const key = JSON.stringify([s.name, s.pts, s.bid, s.won, s.active, s.speaking, s.offline, s.participant, s.subtitle, s.out]);
     if (key === this.tagKey) return;
     this.tagKey = key;
     const tex = canvasTex(512, 170, (g, w) => {
@@ -513,7 +688,12 @@ class Character {
       g.fillText((s.speaking ? '🎙 ' : '') + (s.offline ? '⚠ ' : '') + name, w / 2, 62);
       g.font = '800 34px Outfit, sans-serif';
       g.fillStyle = '#e3a948';
-      g.fillText(s.participant ? `${s.pts} pts  ·  ◎ ${s.bid ?? '–'}  ·  🏆 ${s.won}` : `${s.pts} pts · assistindo`, w / 2, 118);
+      if (s.out) g.fillStyle = '#ff7b7b';
+      g.fillText(
+        s.out ? 'FORA DO JOGO' : s.subtitle ?? (s.participant ? `${s.pts} pts  ·  ◎ ${s.bid ?? '–'}  ·  🏆 ${s.won}` : `${s.pts} pts · assistindo`),
+        w / 2,
+        118,
+      );
       if (s.active) {
         g.fillStyle = '#ffd27a';
         g.font = '800 26px Outfit, sans-serif';
@@ -632,6 +812,39 @@ class Character {
       pitch = 0.5;
       bodyX = 0.18;
     }
+    // ---- Roleta: mira, tambor, disparo, alívio e queda
+    let armZ0 = 0;
+    const ga = this.gunArm;
+    if (this.aimStart > 0 && !this.dead) {
+      armX[ga] = -2.45; // braço sobe até a cabeça
+      armZ0 = ga === 0 ? 0.55 : -0.55;
+      yaw = ga === 0 ? 0.25 : -0.25;
+      pitch = -0.05;
+      const since = now - this.aimStart;
+      if (this.gunDrum && since < 1300 && this.fireAt < 0) this.gunDrum.rotation.y += 0.6 * (1 - since / 1300); // tambor girando
+      if (this.fireAt > 0) {
+        const f = now - this.fireAt;
+        armX[ga] += f < 120 ? -0.35 * (1 - f / 120) : 0; // tranco
+        this.flash.intensity = f < 110 ? 9 * (1 - f / 110) : 0;
+        this.flashSprite.visible = f < 70;
+        const sm = this.smoke.material as THREE.SpriteMaterial;
+        sm.opacity = f < 1500 ? 0.55 * (1 - f / 1500) : 0;
+        this.smoke.position.set(0, 0.04 + f / 4000, 0.17);
+        this.smoke.scale.setScalar(0.1 + f / 5000);
+      }
+    }
+    if (now < this.reliefUntil && !this.dead) {
+      bodyX = -0.12; // encosta, aliviado
+      pitch = -0.25;
+    }
+    if (this.dead) {
+      this.group.rotation.x = THREE.MathUtils.lerp(this.group.rotation.x, -1.15, 0.08); // cai para trás com a cadeira
+      this.flash.intensity = 0;
+      this.flashSprite.visible = false;
+      armX[0] = 0.4;
+      armX[1] = 0.4;
+      pitch = -0.4;
+    } else this.group.rotation.x = THREE.MathUtils.lerp(this.group.rotation.x, 0, 0.12);
     let idle = Math.sin(t * 0.9 + this.phase) * 0.03;
     let idleYaw = Math.sin(t * 0.5 + this.phase) * 0.04;
     if (this.lookSource) {
@@ -644,8 +857,10 @@ class Character {
     }
     this.lookYaw = THREE.MathUtils.lerp(this.lookYaw, yaw, this.lookSource ? 0.2 : 0.08);
     this.lookPitch = THREE.MathUtils.lerp(this.lookPitch, pitch + idle, this.lookSource ? 0.2 : 0.08);
-    this.fan.visible = this.mood !== 'win';
+    this.fan.visible = this.mood !== 'win' && this.aimStart < 0 && !this.dead;
     this.arms.forEach((a, i) => (a.rotation.x = THREE.MathUtils.lerp(a.rotation.x, armX[i], 0.22)));
+    this.arms[ga].rotation.z = THREE.MathUtils.lerp(this.arms[ga].rotation.z, armZ0, 0.2);
+    this.arms[1 - ga].rotation.z = THREE.MathUtils.lerp(this.arms[1 - ga].rotation.z, 0, 0.2);
     this.body.position.y = THREE.MathUtils.lerp(this.body.position.y, bodyY, 0.3);
     this.body.rotation.x = THREE.MathUtils.lerp(this.body.rotation.x, bodyX, 0.1);
     this.head.rotation.x = this.lookPitch;
@@ -693,6 +908,16 @@ export class BarScene {
   private hovered: string | null = null;
   private raycaster = new THREE.Raycaster();
   private lookTableUntil = 0;
+  // ---- Modo Roleta
+  private pile = new THREE.Group();
+  private pileKey = '';
+  private tableSign: THREE.Sprite | null = null;
+  private signKey = '';
+  private camGun = new THREE.Group();
+  private camGunState: 'hidden' | 'aim' = 'hidden';
+  private shakeUntil = 0;
+  private lastShotKey = '';
+  private lastAiming: string | null = null;
   private prevBids = new Map<string, number | null>();
   // Qualidade adaptativa
   private quality = 2;
@@ -943,6 +1168,30 @@ export class BarScene {
     const handLight = new THREE.PointLight(0xffd9a0, 1.2, 2.5);
     handLight.position.set(0, 0.2, 0.2);
     this.camera.add(handLight);
+    // Sua arma em primeira pessoa (aparece na sua vez na roleta)
+    {
+      const metal = new THREE.MeshStandardMaterial({ color: 0x2b2d33, metalness: 0.85, roughness: 0.35 });
+      const wood2 = new THREE.MeshStandardMaterial({ color: 0x5a3216, roughness: 0.6 });
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.16, 10), metal);
+      barrel.rotation.z = Math.PI / 2;
+      barrel.position.set(-0.08, 0.03, 0);
+      const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.05, 12), metal);
+      drum.rotation.z = Math.PI / 2;
+      drum.name = 'drum';
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.09, 0.035), wood2);
+      grip.position.set(0.035, -0.04, 0);
+      grip.rotation.z = 0.35;
+      const skin = mat(0xd6a07a, { roughness: 0.6 });
+      const fist = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 10), skin);
+      fist.position.set(0.04, -0.05, 0.01);
+      fist.scale.set(1, 1.2, 0.9);
+      this.camGun.add(barrel, drum, grip, fist);
+      this.camGun.scale.setScalar(0.55);
+      this.camGun.position.set(0.3, -0.45, -0.5);
+      this.camGun.visible = false;
+      this.camera.add(this.camGun);
+    }
+    s.add(this.pile);
 
     // Personagens
     for (let i = 0; i < 3; i++) {
@@ -1124,6 +1373,98 @@ export class BarScene {
     }
   }
 
+  private charById(id: string): Character | null {
+    const st = this.state;
+    if (!st) return null;
+    const i = st.opponents.findIndex((o) => o.id === id);
+    if (i < 0 || i > 2) return null;
+    const slot = (SLOTS[Math.min(st.opponents.length, 3)] ?? [])[i];
+    return this.chars[slot - 1] ?? null;
+  }
+
+  /** Modo Roleta: cartas na mesa, revelação, placa da cor e a roleta com as armas. */
+  setBluff(b: BluffSceneState) {
+    // Placa da cor da mesa
+    if (b.tableColor !== this.signKey) {
+      this.signKey = b.tableColor;
+      if (!this.tableSign) {
+        this.tableSign = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthTest: false }));
+        this.tableSign.position.set(0, 1.22, -0.1);
+        this.tableSign.scale.set(0.9, 0.22, 1);
+        this.tableSign.renderOrder = 9;
+        this.scene.add(this.tableSign);
+      }
+      const label: Record<string, string> = { BLUE: 'AZUL', RED: 'VERMELHO', GREEN: 'VERDE', YELLOW: 'AMARELO', BLACK: 'PRETO' };
+      const tex = canvasTex(512, 128, (g, w, h) => {
+        g.fillStyle = CARD_COLORS[b.tableColor];
+        roundRect(g, 4, 4, w - 8, h - 8, 30);
+        g.fill();
+        g.strokeStyle = 'rgba(255,255,255,.6)';
+        g.lineWidth = 5;
+        g.stroke();
+        g.fillStyle = b.tableColor === 'YELLOW' ? '#2a1d00' : '#fff';
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.font = '800 30px Outfit, sans-serif';
+        g.fillText('COR DA MESA', w / 2, 38);
+        g.font = '64px Rye, Georgia, serif';
+        g.fillText(label[b.tableColor] ?? '', w / 2, 88);
+      });
+      const m = this.tableSign.material as THREE.SpriteMaterial;
+      m.map?.dispose();
+      m.map = tex;
+      m.needsUpdate = true;
+    }
+
+    // Monte no centro: cartas viradas, ou reveladas na acusação
+    const key = b.reveal ? 'r:' + b.reveal.map((c) => c.id).join(',') : 'p:' + b.pileCount;
+    if (key !== this.pileKey) {
+      this.pileKey = key;
+      for (const c of [...this.pile.children]) {
+        this.pile.remove(c);
+        disposeTree(c);
+      }
+      const cards = b.reveal ?? Array.from({ length: b.pileCount }, () => null);
+      cards.forEach((card, i) => {
+        const tex = !card ? cardBackTex() : card.id === 'BLACK-JOKER' ? devilFaceTex() : cardFaceTex(card, null);
+        const m = flatCard(tex, 0.24);
+        const k = i - (cards.length - 1) / 2;
+        m.position.set(k * (b.reveal ? 0.27 : 0.05), 0.836 + i * 0.003, 0.05);
+        m.rotation.z = b.reveal ? 0 : k * 0.25;
+        if (card && b.reveal) {
+          const ok = card.color === b.tableColor || card.value === 'JOKER';
+          (m.material as THREE.MeshStandardMaterial).emissive.set(ok ? 0x1e5a2a : 0x6a1010);
+        }
+        this.pile.add(m);
+      });
+    }
+
+    // Quem saiu do jogo fica caído
+    for (const o of this.state?.opponents ?? []) this.charById(o.id)?.setDead(b.out.includes(o.id));
+
+    // Mira: personagem levanta a arma (ou a sua arma aparece em primeira pessoa)
+    if (b.aiming !== this.lastAiming) {
+      if (this.lastAiming && this.lastAiming !== b.meId) this.charById(this.lastAiming)?.lower();
+      if (this.lastAiming === b.meId) this.camGunState = 'hidden';
+      this.lastAiming = b.aiming;
+      if (b.aiming === b.meId) this.camGunState = 'aim';
+      else if (b.aiming) this.charById(b.aiming)?.aim(this.camera.position);
+    }
+
+    // Disparo
+    if (b.shot && b.shot.key !== this.lastShotKey) {
+      this.lastShotKey = b.shot.key;
+      if (b.shot.id === b.meId) {
+        this.camGunState = 'aim';
+        this.shakeUntil = performance.now() + (b.shot.hit ? 700 : 250);
+      } else this.charById(b.shot.id)?.fire(b.shot.hit, this.camera.position);
+    }
+    if (!b.aiming && !b.shot) {
+      for (const c of this.chars) c.lower();
+      this.camGunState = 'hidden';
+    }
+  }
+
   /** Mostra a frase de um adversário sobre o personagem dele. */
   say(playerId: string, text: string, ms = 2600) {
     const st = this.state;
@@ -1291,6 +1632,25 @@ export class BarScene {
     this.yaw += (this.yawT - this.yaw) * k;
     this.pitch += (this.pitchT - this.pitch) * k;
     this.applyCamera();
+    // Tremor da câmera no seu disparo
+    const shakeLeft = this.shakeUntil - performance.now();
+    if (shakeLeft > 0) {
+      const a = Math.min(1, shakeLeft / 400) * 0.03;
+      this.camera.rotation.z += (Math.random() - 0.5) * a;
+      this.camera.rotation.x += (Math.random() - 0.5) * a;
+    }
+    // Sua arma: sobe até a lateral da cabeça e o tambor gira
+    {
+      const show = this.camGunState === 'aim';
+      this.camGun.visible = show || this.camGun.position.y > -0.35;
+      // canto direito da tela, cano apontando para a sua cabeça (para a esquerda e um pouco para trás)
+      const tgt = show ? new THREE.Vector3(0.24, 0.02, -0.42) : new THREE.Vector3(0.3, -0.5, -0.5);
+      this.camGun.position.lerp(tgt, 0.12);
+      this.camGun.rotation.z = THREE.MathUtils.lerp(this.camGun.rotation.z, show ? -0.35 : 0, 0.12);
+      this.camGun.rotation.y = THREE.MathUtils.lerp(this.camGun.rotation.y, show ? 0.55 : 0, 0.12);
+      const drum = this.camGun.getObjectByName('drum');
+      if (drum && show && shakeLeft <= 0) drum.rotation.x += 0.25;
+    }
     this.updateLooks();
     for (const c of this.chars) c.tick(t, this.camera.position);
     if (this.hand.enabled) {

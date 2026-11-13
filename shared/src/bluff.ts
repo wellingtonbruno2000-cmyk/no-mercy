@@ -5,14 +5,14 @@ import type { Card, CardColor, PlayerInfo, RandomInt } from './types';
  * Modo "Roleta Sem Piedade": jogo de blefe com roleta, usando as cartas do NO MERCY.
  *
  * - A cada rodada monta-se um baralho de 20 cartas: 6 de cada uma de 3 cores sorteadas
- *   (entre azul, vermelho, verde e amarelo), 1 coringa comum e 1 Coringa Preto ("Sem Piedade").
+ *   (entre azul, vermelho, verde e amarelo), 1 coringa comum e a Carta do Diabo (id BLACK-JOKER).
  * - Sorteia-se a COR DA MESA entre essas 3 cores; cada jogador vivo recebe 5 cartas.
  * - Na sua vez você joga de 1 a 3 cartas viradas, dizendo que são da cor da mesa (pode blefar).
  *   Coringas valem como qualquer cor.
  * - O jogador seguinte pode acusar ("MENTIRA!") ou jogar as próprias cartas. Sem cartas, é obrigado a acusar.
  * - Revelação: se alguma carta não for da cor da mesa (nem coringa), quem jogou vai para a roleta;
  *   se tudo for verdade, quem acusou vai para a roleta.
- * - Coringa Preto: se a jogada acusada tiver o Coringa Preto, TODOS menos quem jogou giram a roleta.
+ * - Carta do Diabo: se a jogada acusada tiver a Carta do Diabo, TODOS menos quem jogou giram a roleta.
  * - Roleta: tambor de 6 espaços com 1 bala em posição secreta; a cada puxada o tambor avança.
  *   Quem é atingido sai do jogo. O último vivo vence.
  */

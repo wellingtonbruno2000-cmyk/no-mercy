@@ -82,7 +82,7 @@ export function Rules({ open, onClose }: { open: boolean; onClose: () => void })
         </Section>
         <Section n={9} title="Modo Roleta Sem Piedade (2 a 6 jogadores)">
           <p>
-            A cada rodada: baralho de 20 cartas (6 de cada uma de 3 cores, 1 coringa e o <b>Coringa Preto</b>), uma <b>cor da mesa</b> sorteada e 5
+            A cada rodada: baralho de 20 cartas (6 de cada uma de 3 cores, 1 coringa e a <b>Carta do Diabo</b>), uma <b>cor da mesa</b> sorteada e 5
             cartas para cada um.
           </p>
           <p>
@@ -91,7 +91,7 @@ export function Rules({ open, onClose }: { open: boolean; onClose: () => void })
           </p>
           <p>
             Se havia carta de outra cor, quem jogou vai para a roleta; se era verdade, quem acusou vai. Se a jogada acusada tinha o{' '}
-            <b>Coringa Preto</b>, todos menos quem jogou vão para a roleta.
+            <b>Carta do Diabo</b>, todos menos quem jogou vão para a roleta.
           </p>
           <p>Roleta: 6 espaços e 1 bala; a cada puxada a chance aumenta. Quem for atingido sai. O último de pé vence.</p>
         </Section>

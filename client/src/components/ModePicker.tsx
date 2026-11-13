@@ -50,7 +50,7 @@ export function ModePicker({
         {mode === 'roleta' && (
           <label className="mt-2 flex items-center gap-2 text-xs text-mist/80">
             <input type="checkbox" checked={special} disabled={disabled} onChange={(e) => onSpecial(e.target.checked)} className="accent-gold" />
-            Coringa Preto ativo (se for acusado, todos menos quem jogou giram a roleta)
+            Carta do Diabo ativa (se a jogada com ela for acusada, todos menos quem jogou vão para a roleta)
           </label>
         )}
       </div>

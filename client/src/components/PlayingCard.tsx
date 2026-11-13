@@ -29,9 +29,25 @@ interface Props {
   onClick?: () => void;
   disabled?: boolean;
   title?: string;
+  /** Modo Roleta: desenha a carta especial "Carta do Diabo". */
+  devil?: boolean;
 }
 
-export function PlayingCard({ card, size = 'md', jokerMode, selected, highlight, dim, onClick, disabled, title }: Props) {
+/** Ícone original da Carta do Diabo: chifres e tridente. */
+function DevilIcon({ size }: { size: number }) {
+  return (
+    <svg width={size * 1.6} height={size * 1.6} viewBox="0 0 48 48" aria-hidden>
+      <path d="M10 18c-4-6-2-12 2-15 0 6 3 9 7 11z" fill="#ff3b3b" />
+      <path d="M38 18c4-6 2-12-2-15 0 6-3 9-7 11z" fill="#ff3b3b" />
+      <path d="M24 10v34" stroke="#ffcf6b" strokeWidth="3" strokeLinecap="round" />
+      <path d="M14 14c0 7 4 10 10 10s10-3 10-10" fill="none" stroke="#ffcf6b" strokeWidth="3" strokeLinecap="round" />
+      <path d="M14 14l-2-5M24 10l0-6M34 14l2-5" stroke="#ffcf6b" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function PlayingCard({ card, size = 'md', jokerMode, selected, highlight, dim, onClick, disabled, title, devil }: Props) {
+  if (devil) return <DevilCard size={size} selected={selected} highlight={highlight} dim={dim} onClick={onClick} disabled={disabled} cardId={card.id} />;
   const s = SIZE[size];
   const st = CARD_STYLE[card.color];
   const joker = card.value === 'JOKER';
@@ -91,6 +107,53 @@ export function PlayingCard({ card, size = 'md', jokerMode, selected, highlight,
           {size !== 'xs' && (jokerMode === 'MAX' ? 'Max' : 'Min')}
         </span>
       )}
+    </Comp>
+  );
+}
+
+function DevilCard({
+  size,
+  selected,
+  highlight,
+  dim,
+  onClick,
+  disabled,
+  cardId,
+}: {
+  size: CardSize;
+  selected?: boolean;
+  highlight?: boolean;
+  dim?: boolean;
+  onClick?: () => void;
+  disabled?: boolean;
+  cardId: string;
+}) {
+  const s = SIZE[size];
+  const Comp = onClick ? motion.button : motion.div;
+  return (
+    <Comp
+      type={onClick ? 'button' : undefined}
+      onClick={onClick}
+      disabled={disabled}
+      data-card={cardId}
+      aria-label="Carta do Diabo"
+      title="Carta do Diabo — se a jogada com ela for acusada, todos menos quem jogou vão para a roleta"
+      animate={{ y: selected ? -18 : 0, scale: highlight ? 1.06 : 1 }}
+      transition={{ type: 'spring', stiffness: 420, damping: 28 }}
+      className={[
+        'relative shrink-0 overflow-hidden shadow-card ring-2 ring-red-500/70 bg-gradient-to-br from-[#3a0606] via-[#120202] to-[#000]',
+        s.box,
+        selected ? 'outline outline-[3px] outline-gold' : '',
+        highlight ? 'shadow-[0_0_24px_rgba(255,40,40,.7)]' : '',
+        dim ? 'opacity-60' : '',
+        onClick && !disabled ? 'cursor-pointer' : '',
+      ].join(' ')}
+    >
+      <div className="absolute inset-[3px] rounded-[inherit] ring-1 ring-red-400/40" />
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <DevilIcon size={s.icon} />
+        {size !== 'xs' && size !== 'sm' && <span className="mt-0.5 text-[9px] font-black uppercase tracking-widest text-red-300">Diabo</span>}
+      </div>
     </Comp>
   );
 }

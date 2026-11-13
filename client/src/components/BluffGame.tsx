@@ -1,7 +1,11 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { BookOpen, Crown, LogOut, RotateCcw, Skull, Target, Trophy } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { claimText, COLOR_LABEL, type BluffView, type Card, type RoomView } from '@nomercy/shared';
+import { BookOpen, Box, Crown, LogOut, RotateCcw, Skull, Square, Target, Trophy } from 'lucide-react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import { updateAudioSettings, useAudioSettings } from '../lib/audio';
+import { webglAvailable } from '../lib/webgl';
+
+const BluffTable3D = lazy(() => import('../three/BluffTable3D'));
+import { claimText, COLOR_LABEL, isSpecialCard, type BluffView, type Card, type RoomView } from '@nomercy/shared';
 import { useMedia } from '../lib/hooks';
 import { leaveRoom, send } from '../lib/store';
 import { AudioButtons } from './AudioPanel';
@@ -95,6 +99,27 @@ export function BluffGame({ room }: { room: RoomView }) {
   const [sending, setSending] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  // Mesa 3D (até 4 jogadores): personagens com revólver
+  const prefs = useAudioSettings();
+  const [failed3d, setFailed3d] = useState(false);
+  const [ready3d, setReady3d] = useState(false);
+  const onFail3d = useCallback(() => setFailed3d(true), []);
+  const onReady3d = useCallback(() => setReady3d(true), []);
+  const can3d = b.players.length <= 4 && webglAvailable() && !failed3d;
+  const use3d = can3d && prefs.view3d;
+  const layout3d = use3d && ready3d;
+  useEffect(() => {
+    if (!use3d) setReady3d(false);
+  }, [use3d]);
+  // Você foi atingido: tela vermelha
+  const [hitFlash, setHitFlash] = useState(false);
+  const meHitKey = b.lastShot && b.lastShot.playerId === b.you && b.lastShot.hit ? `${b.round}-${b.lastShot.pull}` : '';
+  useEffect(() => {
+    if (!meHitKey) return;
+    setHitFlash(true);
+    const t = setTimeout(() => setHitFlash(false), 2600);
+    return () => clearTimeout(t);
+  }, [meHitKey]);
   const meIdx = b.players.findIndex((p) => p.id === b.you);
   const others = [...b.players.slice(meIdx + 1), ...b.players.slice(0, meIdx)];
   const myTurn = b.phase === 'TURN' && b.turnId === b.you;
@@ -124,7 +149,7 @@ export function BluffGame({ room }: { room: RoomView }) {
     }
     if (b.phase === 'REVEAL' && b.call) {
       const c = b.call;
-      if (c.special) return `CORINGA PRETO! Todos menos ${n.name(c.play.playerId)} vão para a roleta!`;
+      if (c.special) return `CARTA DO DIABO! Todos menos ${n.name(c.play.playerId)} vão para a roleta!`;
       return c.truthful ? `Era verdade! ${n.name(c.callerId)} vai para a roleta` : `Era blefe! ${n.name(c.play.playerId)} vai para a roleta`;
     }
     if (b.phase === 'ROULETTE') {
@@ -142,7 +167,12 @@ export function BluffGame({ room }: { room: RoomView }) {
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden felt">
-      <BarAmbience table />
+      {!layout3d && <BarAmbience table />}
+      {use3d && (
+        <Suspense fallback={null}>
+          <BluffTable3D room={room} onFail={onFail3d} onReady={onReady3d} />
+        </Suspense>
+      )}
       <header className="z-20 flex items-center gap-2 border-b border-white/5 bg-black/25 px-3 py-2 backdrop-blur-md">
         <div className="hidden sm:block">
           <Logo size="sm" />
@@ -152,8 +182,18 @@ export function BluffGame({ room }: { room: RoomView }) {
             <Target size={12} /> Roleta Sem Piedade
           </span>
           <span className="chip bg-white/10 text-mist">Rodada {b.round}</span>
-          {b.special && <span className="chip bg-black/60 text-gold">Coringa Preto ativo</span>}
+          {b.special && <span className="chip bg-red-950/80 text-red-200">Carta do Diabo ativa</span>}
         </div>
+        {can3d && (
+          <button
+            className={`flex items-center gap-1 rounded-xl px-2 py-2 text-xs font-black hover:bg-white/10 ${use3d ? 'text-gold' : 'text-mist/80'}`}
+            onClick={() => updateAudioSettings({ view3d: !use3d })}
+            data-testid="bluff-toggle-3d"
+          >
+            {use3d ? <Square size={18} /> : <Box size={18} />}
+            {use3d ? '2D' : '3D'}
+          </button>
+        )}
         <AudioButtons room={room} />
         <button className="rounded-xl p-2 text-mist/80 hover:bg-white/10" onClick={() => setShowRules(true)} aria-label="Regras" title="Regras">
           <BookOpen size={20} />
@@ -163,8 +203,8 @@ export function BluffGame({ room }: { room: RoomView }) {
         </button>
       </header>
 
-      <main className="relative flex min-h-0 flex-1 flex-col">
-        {desktop ? (
+      <main className={`relative flex min-h-0 flex-1 flex-col ${layout3d ? 'pointer-events-none' : ''}`}>
+        {layout3d ? null : desktop ? (
           <div className="pointer-events-none absolute inset-0">
             {others.map((p, i) => {
               const k = others.length;
@@ -185,9 +225,9 @@ export function BluffGame({ room }: { room: RoomView }) {
           </div>
         )}
 
-        <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-3">
+        <div className={`relative z-10 flex min-h-0 flex-1 flex-col items-center gap-3 px-3 ${layout3d ? 'justify-start pt-2' : 'justify-center'}`}>
           {/* Cor da mesa */}
-          <motion.div
+          {!layout3d && <motion.div
             key={`${b.round}-${b.tableColor}`}
             initial={{ scale: 0.6, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
@@ -196,7 +236,7 @@ export function BluffGame({ room }: { room: RoomView }) {
           >
             <span className="text-[11px] font-black uppercase tracking-widest opacity-80">Cor da mesa</span>
             <span className="font-display text-xl">{COLOR_LABEL[b.tableColor]}</span>
-          </motion.div>
+          </motion.div>}
 
           <div
             className={`rounded-full px-4 py-1.5 text-center text-sm font-bold sm:text-base ${myTurn ? 'bg-gold text-night shadow-glow' : 'bg-black/50 text-mist'}`}
@@ -205,8 +245,8 @@ export function BluffGame({ room }: { room: RoomView }) {
             {status}
           </div>
 
-          {/* Monte: última jogada (virada) ou a revelação */}
-          <div className="flex min-h-[110px] flex-col items-center gap-1.5">
+          {/* Monte: última jogada (virada) ou a revelação — no 3D fica sobre a mesa */}
+          <div className={`flex min-h-[110px] flex-col items-center gap-1.5 ${layout3d ? 'hidden' : ''}`}>
             {b.phase === 'REVEAL' && b.call ? (
               <>
                 <div className="flex gap-1.5">
@@ -215,6 +255,7 @@ export function BluffGame({ room }: { room: RoomView }) {
                       <PlayingCard
                         card={c}
                         size="md"
+                        devil={b.special && isSpecialCard(c)}
                         highlight={c.color === b.tableColor || c.value === 'JOKER'}
                         dim={!(c.color === b.tableColor || c.value === 'JOKER')}
                       />
@@ -279,6 +320,7 @@ export function BluffGame({ room }: { room: RoomView }) {
                 <PlayingCard
                   key={c.id}
                   card={c}
+                  devil={b.special && isSpecialCard(c)}
                   size={desktop ? 'lg' : 'md'}
                   selected={validSel.includes(c.id)}
                   onClick={() => toggle(c)}
@@ -300,7 +342,7 @@ export function BluffGame({ room }: { room: RoomView }) {
 
       {/* Roleta */}
       <AnimatePresence>
-        {b.phase === 'ROULETTE' && rouletteId && (
+        {b.phase === 'ROULETTE' && rouletteId && !layout3d && (
           <motion.div
             key={`${rouletteId}-${shot?.pull ?? 0}`}
             className="pointer-events-none fixed inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-black/55 backdrop-blur-[2px]"
@@ -328,6 +370,21 @@ export function BluffGame({ room }: { room: RoomView }) {
                 {shot && nextShooter && <p className="text-xs text-mist/70">Próximo: {n.name(nextShooter)}</p>}
               </>
             )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Você foi atingido */}
+      <AnimatePresence>
+        {hitFlash && (
+          <motion.div
+            className="pointer-events-none fixed inset-0 z-[45] flex items-center justify-center bg-red-900/60"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0, 1, 0.85] }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <p className="font-display text-5xl text-white drop-shadow-[0_4px_0_rgba(0,0,0,.6)]">VOCÊ ESTÁ FORA!</p>
           </motion.div>
         )}
       </AnimatePresence>

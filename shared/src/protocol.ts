@@ -10,7 +10,7 @@ export interface RoomSettings {
   turnSeconds: number;
   /** Modo de jogo: clássico NO MERCY ou "Roleta Sem Piedade" (blefe com roleta). */
   mode: GameMode;
-  /** Roleta: Coringa Preto ativo (se acusado, todos menos quem jogou giram a roleta). */
+  /** Roleta: Carta do Diabo ativa (se acusado, todos menos quem jogou giram a roleta). */
   special: boolean;
   /** Dificuldade dos bots (todos os modos). */
   botLevel: BotLevel;
