@@ -9,7 +9,7 @@ Este guia tem 6 partes:
 5. Fazer o jogo aparecer no Google
 6. Instalador .exe para Windows (programa de PC)
 
-> Quer só jogar no PC agora? Pule direto para a **Parte 6** e use o instalador `NO-MERCY-Setup-1.2.0.exe`.
+> Quer só jogar no PC agora? Pule direto para a **Parte 6** e use o instalador `NO-MERCY-Setup-1.2.2.exe`.
 
 ---
 
@@ -167,7 +167,7 @@ O instalador cria o programa **NO MERCY** no seu PC, com ícone na área de trab
 - **Jogar online:** com amigos, usando o endereço do jogo publicado no Render (Parte 3).
 
 ### 6.1 Instalar
-1. Baixe o arquivo **NO-MERCY-Setup-1.2.0.exe** e dê dois cliques nele
+1. Baixe o arquivo **NO-MERCY-Setup-1.2.2.exe** e dê dois cliques nele
 2. O Windows pode mostrar **"O Windows protegeu o computador"** (acontece com todo programa sem
    assinatura digital paga). Clique em **Mais informações** → **Executar assim mesmo**
 3. Siga o instalador: **Avançar** → escolha a pasta (pode deixar a sugerida) → **Instalar** → **Concluir**
@@ -214,7 +214,7 @@ Nas partidas de **2 a 4 jogadores** a mesa é 3D (até três personagens).
 - **Mouse:** mexa o mouse para olhar ao redor da mesa. Os personagens acompanham você com o olhar.
 - **Suas cartas em 3D:** clique numa carta das suas mãos para selecionar e depois em **Jogar carta**.
   Quando você passa o mouse sobre suas cartas, os adversários ficam desconfiados.
-- **Celular/tablet:** arraste o dedo na mesa para olhar ao redor (as cartas ficam em 2D, mais fáceis de ler).
+- **Celular/tablet:** arraste **um dedo** na mesa para olhar ao redor — a visão fica onde você soltar. **Toque duas vezes** na mesa para centralizar. (As cartas ficam em 2D, mais fáceis de ler.)
 - Botões na barra de cima: **2D/3D** (troca a mesa) e **Mão 2D/Mão 3D** (no computador).
 - Se o aparelho estiver lento, o jogo reduz a qualidade sozinho (resolução e sombras). Se ainda travar, use **2D**.
 

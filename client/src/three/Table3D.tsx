@@ -29,6 +29,7 @@ export default function Table3D({ g, room, onFail, hand, suspicious, onCardClick
         onCardClick: (id) => cbRef.current.onCardClick(id),
         onCardHover: (h) => cbRef.current.onCardHover(h),
         getLook,
+        onContextLost: () => onFail(),
       });
     } catch (err) {
       console.warn('[3D] indisponível, voltando para 2D', err);

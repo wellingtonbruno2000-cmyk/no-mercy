@@ -212,13 +212,31 @@ describe('palpites', () => {
 
   it('soma anterior igual ao total proíbe zero', () => {
     let g = createGame(players(4), { startDealerSeat: 0, randomInt: seeded(9) });
+    g = bidAll(g);
+    g = advance(g);
+    g = advance(g); // partida 2 (2 rodadas)
+    const [a, b, c] = g.participants;
+    g = placeBid(g, a, 1);
+    g = placeBid(g, b, 1);
+    g = placeBid(g, c, 0);
+    expect(forbiddenBid(g)).toBe(0);
+    expect(allowedBids(g)).toEqual([1, 2]);
+  });
+
+  it('primeira partida às cegas: o último pode palpitar qualquer valor', () => {
+    let g = createGame(players(4), { startDealerSeat: 0, randomInt: seeded(9) });
     g = placeBid(g, 'p1', 1);
     g = placeBid(g, 'p2', 0);
     g = placeBid(g, 'p3', 0);
-    expect(forbiddenBid(g)).toBe(0);
-    expect(allowedBids(g)).toEqual([1]);
+    expect(forbiddenBid(g)).toBeNull();
+    expect(allowedBids(g)).toEqual([0, 1]);
+    g = placeBid(g, 'p0', 0); // soma 1 = nº de rodadas: permitido na partida às cegas
+    expect(g.phase).toBe('ROUND_RESULT');
+    // todos podem dizer que vão ganhar
+    let h = createGame(players(4), { startDealerSeat: 0, randomInt: seeded(10) });
+    for (const id of ['p1', 'p2', 'p3', 'p0']) h = placeBid(h, id, 1);
+    expect(h.phase).toBe('ROUND_RESULT');
   });
-
   it('palpite fora de ordem ou repetido é rejeitado', () => {
     const g = createGame(players(5), { startDealerSeat: 2, randomInt: seeded(1) });
     expect(() => placeBid(g, 'p0', 0)).toThrow(/vez/);
@@ -400,7 +418,7 @@ describe('jogos completos com bots', () => {
           const used = h.rounds.flatMap((r) => r.plays.map((p) => p.card.id));
           expect(new Set(used).size).toBe(used.length);
           const sumBids = Object.values(h.bids).reduce((a, b) => a + b, 0);
-          expect(sumBids).not.toBe(h.cardsPerPlayer);
+          if (h.number > 1) expect(sumBids).not.toBe(h.cardsPerPlayer); // a 1ª (às cegas) é livre
           const sumTricks = Object.values(h.tricks).reduce((a, b) => a + b, 0);
           expect(sumTricks).toBe(h.cardsPerPlayer);
         });

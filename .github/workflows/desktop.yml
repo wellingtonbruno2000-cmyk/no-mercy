@@ -1,0 +1,36 @@
+# Gera o instalador .exe do NO MERCY num Windows do GitHub (grátis).
+# GitHub → aba Actions → "Instalador para Windows" → Run workflow.
+name: Instalador para Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      online_url:
+        description: 'Endereço do jogo online (ex.: https://no-mercy-abcd.onrender.com) — opcional'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Dependências do jogo
+        run: npm ci
+      - name: Dependências do app de PC
+        working-directory: desktop
+        run: npm install
+      - name: Gerar instalador
+        working-directory: desktop
+        env:
+          NOMERCY_ONLINE_URL: ${{ github.event.inputs.online_url }}
+        run: |
+          npm run prepare-app
+          npx electron-builder --win nsis --x64 --publish never -c.win.signAndEditExecutable=true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NO-MERCY-instalador-windows
+          path: desktop/release/*.exe

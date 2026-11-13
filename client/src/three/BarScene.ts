@@ -51,6 +51,8 @@ export interface SceneCallbacks {
   onCardHover?: (hovering: boolean) => void;
   /** Para onde um jogador humano está olhando (mouse, -1..1). */
   getLook?: (playerId: string) => { x: number; y: number } | null;
+  /** O navegador perdeu o contexto 3D: o jogo deve voltar para 2D. */
+  onContextLost?: () => void;
 }
 
 /** Assentos usados conforme o número de adversários (1 = frente; 2 = laterais; 3 = esquerda, frente, direita). */
@@ -666,7 +668,9 @@ export class BarScene {
   private yawT = 0;
   private pitchT = 0;
   private mouse = new THREE.Vector2(0, 0);
-  private dragging: { x: number; y: number; yaw: number; pitch: number } | null = null;
+  private dragging: { id: number; x: number; y: number; yaw: number; pitch: number } | null = null;
+  private lastTap = 0;
+  private lastT = 0;
   // Sua mão em 3D
   private handGroup = new THREE.Group();
   private handCards = new Map<string, THREE.Mesh>();
@@ -682,6 +686,7 @@ export class BarScene {
   private fpsWindowStart = performance.now();
   private fps = 60;
   private lowStreak = 0;
+  private startedAt = performance.now();
 
   constructor(private container: HTMLElement, private cb: SceneCallbacks = {}) {
     const mobile = Math.min(window.innerWidth, window.innerHeight) < 700;
@@ -694,6 +699,12 @@ export class BarScene {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.domElement.style.display = 'block';
     this.renderer.domElement.setAttribute('aria-hidden', 'true');
+    // Se a placa de vídeo "perder" o 3D (driver, falta de memória), o jogo volta para a mesa 2D.
+    this.renderer.domElement.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      cancelAnimationFrame(this.raf);
+      this.cb.onContextLost?.();
+    });
     container.appendChild(this.renderer.domElement);
     this.build(mobile);
     this.ro = new ResizeObserver(() => this.resize());
@@ -703,6 +714,10 @@ export class BarScene {
     window.addEventListener('pointermove', this.onPointerMove);
     this.renderer.domElement.addEventListener('pointerdown', this.onPointerDown);
     window.addEventListener('pointerup', this.onPointerUp);
+    window.addEventListener('pointercancel', this.onPointerUp);
+    // Impede que o navegador use o arrasto para rolar/dar zoom (era o que fazia a câmera "bugar" no celular).
+    this.renderer.domElement.style.touchAction = 'none';
+    (window as unknown as { __nm3dCam: unknown }).__nm3dCam = () => ({ yaw: +this.yaw.toFixed(3), pitch: +this.pitch.toFixed(3), dragging: !!this.dragging });
     // Para testes automatizados: rotação da cabeça de cada boneco.
     (window as unknown as { __nm3dHeads: unknown }).__nm3dHeads = () =>
       this.chars.map((c) => ({ visible: c.group.visible, ...c.headAngles() }));
@@ -719,37 +734,62 @@ export class BarScene {
 
   // ---------- Entrada (mouse / toque) ----------
   private onPointerMove = (e: PointerEvent) => {
-    const r = this.container.getBoundingClientRect();
-    const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
-    const ny = ((e.clientY - r.top) / r.height) * 2 - 1;
-    this.mouse.set(THREE.MathUtils.clamp(nx, -1, 1), THREE.MathUtils.clamp(-ny, -1, 1));
     if (e.pointerType === 'mouse') {
+      const r = this.container.getBoundingClientRect();
+      const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
+      const ny = ((e.clientY - r.top) / r.height) * 2 - 1;
+      this.mouse.set(THREE.MathUtils.clamp(nx, -1, 1), THREE.MathUtils.clamp(-ny, -1, 1));
       // Vira a "cabeça" levemente na direção do mouse.
       this.yawT = -this.mouse.x * 0.3;
       this.pitchT = this.mouse.y * 0.1;
       this.updateHover();
-    } else if (this.dragging) {
-      this.yawT = THREE.MathUtils.clamp(this.dragging.yaw + (e.clientX - this.dragging.x) * 0.004, -0.5, 0.5);
-      this.pitchT = THREE.MathUtils.clamp(this.dragging.pitch - (e.clientY - this.dragging.y) * 0.003, -0.15, 0.15);
+      return;
     }
+    // Toque: só o dedo que começou o arrasto move a câmera (um segundo dedo não faz a visão pular).
+    if (!this.dragging || e.pointerId !== this.dragging.id) return;
+    const r = this.container.getBoundingClientRect();
+    const dx = (e.clientX - this.dragging.x) / Math.max(r.width, 1);
+    const dy = (e.clientY - this.dragging.y) / Math.max(r.height, 1);
+    this.yawT = THREE.MathUtils.clamp(this.dragging.yaw + dx * 1.4, -0.6, 0.6);
+    this.pitchT = THREE.MathUtils.clamp(this.dragging.pitch - dy * 0.6, -0.2, 0.2);
   };
 
   private onPointerDown = (e: PointerEvent) => {
-    this.onPointerMove(e);
+    if (e.pointerType === 'mouse') {
+      this.onPointerMove(e);
+      const id = this.pickCard();
+      if (id) this.cb.onCardClick?.(id);
+      return;
+    }
+    // Toque na carta 3D (se a mão 3D estiver ligada no celular)
+    const r = this.container.getBoundingClientRect();
+    this.mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -(((e.clientY - r.top) / r.height) * 2 - 1));
     const id = this.pickCard();
     if (id) {
       this.cb.onCardClick?.(id);
       return;
     }
-    if (e.pointerType !== 'mouse') this.dragging = { x: e.clientX, y: e.clientY, yaw: this.yawT, pitch: this.pitchT };
+    if (!e.isPrimary || this.dragging) return;
+    // Toque duplo: centraliza a visão
+    const now = e.timeStamp || performance.now();
+    if (now - this.lastTap < 350) {
+      this.yawT = 0;
+      this.pitchT = 0;
+      this.lastTap = 0;
+      return;
+    }
+    this.lastTap = now;
+    this.dragging = { id: e.pointerId, x: e.clientX, y: e.clientY, yaw: this.yawT, pitch: this.pitchT };
+    try {
+      this.renderer.domElement.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignora */
+    }
   };
 
-  private onPointerUp = () => {
-    if (this.dragging) {
-      this.dragging = null;
-      this.yawT = 0; // volta suavemente para o centro
-      this.pitchT = 0;
-    }
+  private onPointerUp = (e: PointerEvent) => {
+    // A visão fica onde você deixou (toque duplo centraliza).
+    if (this.dragging && e.pointerId === this.dragging.id) this.dragging = null;
   };
 
   private pickCard(): string | null {
@@ -1170,13 +1210,19 @@ export class BarScene {
   /** Reduz a qualidade automaticamente se o aparelho não acompanhar (evita travamentos). */
   private adaptQuality(now: number) {
     this.frames++;
+    // Ignora os primeiros segundos (compilação dos shaders e carregamento deixam tudo lento no começo).
+    if (now - this.startedAt < 8000) {
+      this.frames = 0;
+      this.fpsWindowStart = now;
+      return;
+    }
     const elapsed = now - this.fpsWindowStart;
     if (elapsed < 2000) return;
     this.fps = (this.frames * 1000) / elapsed;
     this.frames = 0;
     this.fpsWindowStart = now;
     this.lowStreak = this.fps < 40 ? this.lowStreak + 1 : 0;
-    if (this.lowStreak >= 2 && this.quality > 0) {
+    if (this.lowStreak >= 3 && this.quality > 0) {
       this.lowStreak = 0;
       this.quality--;
       if (this.quality === 1) {
@@ -1214,9 +1260,12 @@ export class BarScene {
     const t = this.clock.getElapsedTime();
     this.lamp.rotation.z = Math.sin(t * 0.6) * 0.03;
     this.lamp.rotation.x = Math.cos(t * 0.5) * 0.02;
-    this.spot.intensity = 38 * (Math.random() < 0.012 ? 0.75 : 1);
-    this.yaw = THREE.MathUtils.lerp(this.yaw, this.yawT, this.dragging ? 0.3 : 0.06);
-    this.pitch = THREE.MathUtils.lerp(this.pitch, this.pitchT, this.dragging ? 0.3 : 0.06);
+    // Suavização independente da taxa de quadros (fica igual em celular lento ou rápido).
+    const dt = Math.min(0.1, Math.max(0, t - this.lastT));
+    this.lastT = t;
+    const k = 1 - Math.exp(-dt * (this.dragging ? 18 : 6));
+    this.yaw += (this.yawT - this.yaw) * k;
+    this.pitch += (this.pitchT - this.pitch) * k;
     this.applyCamera();
     this.updateLooks();
     for (const c of this.chars) c.tick(t, this.camera.position);
@@ -1252,6 +1301,7 @@ export class BarScene {
     document.removeEventListener('visibilitychange', this.onVisibility);
     window.removeEventListener('pointermove', this.onPointerMove);
     window.removeEventListener('pointerup', this.onPointerUp);
+    window.removeEventListener('pointercancel', this.onPointerUp);
     this.renderer.domElement.removeEventListener('pointerdown', this.onPointerDown);
     this.scene.traverse((o) => {
       const m = o as THREE.Mesh;

@@ -175,6 +175,8 @@ export function currentActorId(state: GameState): string | null {
 /** Valor proibido para o último palpite, se a restrição se aplica à vez atual. */
 export function forbiddenBid(state: GameState): number | null {
   if (state.phase !== 'BIDDING') return null;
+  // Primeira partida (às cegas): sem restrição para o último — todos podem palpitar livremente.
+  if (state.stage === 'MAIN' && state.handNumber === 1) return null;
   if (state.bidTurn !== state.participants.length - 1) return null;
   let sum = 0;
   for (const id of state.participants) if (state.bids[id] !== undefined) sum += state.bids[id];

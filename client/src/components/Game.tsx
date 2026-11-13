@@ -16,7 +16,7 @@ import {
   Trophy,
   WifiOff,
 } from 'lucide-react';
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import { Component, Suspense, lazy, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   isHiddenCard,
   playPower,
@@ -43,7 +43,36 @@ import { updateAudioSettings, useAudioSettings } from '../lib/audio';
 import { webglAvailable } from '../lib/webgl';
 
 // A cena 3D (three.js) só é baixada quando for usada.
-const Table3D = lazy(() => import('../three/Table3D'));
+// Depois de uma publicação nova, uma aba antiga pode pedir um arquivo que não existe mais:
+// nesse caso recarrega a página uma vez para pegar a versão nova.
+const Table3D = lazy(() =>
+  import('../three/Table3D').catch((err) => {
+    try {
+      if (!sessionStorage.getItem('nomercy:reloaded')) {
+        sessionStorage.setItem('nomercy:reloaded', '1');
+        window.location.reload();
+      }
+    } catch {
+      /* ignora */
+    }
+    throw err;
+  }),
+);
+
+/** Se a mesa 3D der erro, mostra a mesa 2D em vez de deixar partes da tela em branco. */
+class Safe3D extends Component<{ onFail: () => void; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(err: unknown) {
+    console.warn('[3D] erro, voltando para 2D', err);
+    this.props.onFail();
+  }
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
 
 export interface Names {
   name: (id: string) => string;
@@ -106,6 +135,7 @@ export function Game({ room }: { room: RoomView }) {
   return (
     <div className={`relative flex h-full flex-col overflow-hidden ${tiebreak ? 'felt-tiebreak' : 'felt'}`}>
       {use3d ? (
+        <Safe3D onFail={onFail3d}>
         <Suspense fallback={<div className="absolute inset-0 flex items-center justify-center text-sm text-mist/60">Preparando a mesa 3D…</div>}>
           <Table3D
             g={g}
@@ -117,6 +147,7 @@ export function Game({ room }: { room: RoomView }) {
             onCardHover={setHovering}
           />
         </Suspense>
+        </Safe3D>
       ) : (
         <BarAmbience table tiebreak={tiebreak} />
       )}

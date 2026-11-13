@@ -86,7 +86,7 @@ com bots para 2 a 8 jogadores; salas, código, bots, reconexão, jogador ausente
 - O baralho é embaralhado (Fisher–Yates com aleatoriedade criptográfica do servidor), cortado e distribuído uma carta por vez.
 - Quem embaralha avança a cada partida; o da esquerda começa os palpites e a 1ª rodada da partida.
   Nas rodadas seguintes, quem venceu a rodada anterior começa jogando. Não é obrigatório seguir cor.
-- O último palpite não pode fazer a soma igual ao número de rodadas.
+- O último palpite não pode fazer a soma igual ao número de rodadas (exceto na 1ª partida, às cegas, que é livre).
 - 1ª partida às cegas: você vê as cartas dos outros, não a sua; coringas maximizados.
 - Acertou: 10 + palpite. Errou: 0.
 - Empate no topo: partida extra às cegas só entre os empatados (acertar 0 = 10, acertar 1 = 11),

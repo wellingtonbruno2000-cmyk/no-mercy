@@ -80,6 +80,11 @@ export async function startServer(opts: ServerOptions = {}) {
         },
       }),
     );
+    // Arquivo de versão antiga que não existe mais: 404 (antes devolvia a página e quebrava partes da tela).
+    app.get(/^\/assets\//, (_req, res) => {
+      res.status(404).setHeader('Cache-Control', 'no-store');
+      res.type('text/plain').send('Arquivo não encontrado (versão antiga do jogo). Recarregue a página.');
+    });
     app.get('*', (req, res) => {
       res.setHeader('Cache-Control', 'no-cache');
       res.type('html').send(renderIndex(req));

@@ -62,14 +62,14 @@ export function Rules({ open, onClose }: { open: boolean; onClose: () => void })
           <p>
             <b>Regra do último:</b> quem palpita por último não pode escolher um valor que faça a soma dos palpites ser igual ao número de
             rodadas.
-          </p>
+           Exceção: na primeira partida (às cegas) não há essa restrição — todos podem palpitar livremente.</p>
         </Section>
         <Section n={5} title="Coringas">
           <p>Ao jogar um coringa, escolha <b className="text-gold">MAXIMIZAR</b> (vence tudo) ou <b className="text-cyan-300">MINIMIZAR</b> (perde para tudo).</p>
           <p>Na partida às cegas e no desempate, todos os coringas são maximizados.</p>
         </Section>
         <Section n={6} title="Primeira partida às cegas">
-          <p>Você recebe 1 carta mas não pode vê-la — só enxerga as cartas dos adversários. Palpite 0 ou 1 e depois todas são reveladas juntas.</p>
+          <p>Você recebe 1 carta mas não pode vê-la — só enxerga as cartas dos adversários. Palpite 0 ou 1 (sem restrição para o último) e depois todas são reveladas juntas.</p>
         </Section>
         <Section n={7} title="Pontuação">
           <p>Acertou o palpite: <b>10 + palpite</b> pontos. Errou: <b>0</b>. Ex.: palpite 2 e venceu 2 → 12 pontos.</p>

@@ -20,10 +20,10 @@ export function BarAmbience({ table = false, tiebreak = false }: { table?: boole
       <div className="absolute left-1/2 top-0 origin-top animate-sway" style={{ transform: 'translateX(-50%)' }}>
         <div className="mx-auto h-10 w-px bg-black/80 sm:h-14" />
         <div className="relative mx-auto h-5 w-16 rounded-t-full bg-gradient-to-b from-[#2a2a2a] to-[#0c0c0c] shadow-lg sm:h-6 sm:w-20" />
-        <div className="mx-auto -mt-1 h-3 w-6 animate-flicker rounded-b-full bg-[#ffd68a] shadow-[0_0_30px_12px_rgba(255,190,90,.55)]" />
+        <div className="mx-auto -mt-1 h-3 w-6 rounded-b-full bg-[#ffd68a] shadow-[0_0_30px_12px_rgba(255,190,90,.55)]" />
       </div>
       <div
-        className="absolute left-1/2 top-12 h-[85%] w-[110%] -translate-x-1/2 animate-flicker sm:top-16"
+        className="absolute left-1/2 top-12 h-[85%] w-[110%] -translate-x-1/2 sm:top-16"
         style={{
           background: tiebreak
             ? 'radial-gradient(ellipse 45% 70% at 50% 0%, rgba(255,120,80,.16), transparent 70%)'

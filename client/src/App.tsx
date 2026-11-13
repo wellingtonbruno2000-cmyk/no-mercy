@@ -15,6 +15,16 @@ export default function App() {
   useGameSounds(room);
   useEffect(() => syncVoiceWithRoom(room), [room]);
   useEffect(() => applyVoiceOutput(), [audio]);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        sessionStorage.removeItem('nomercy:reloaded');
+      } catch {
+        /* ignora */
+      }
+    }, 10000);
+    return () => clearTimeout(t);
+  }, []);
   return (
     <>
       {!room ? <Home /> : room.status === 'LOBBY' ? <Lobby room={room} /> : <Game room={room} />}
