@@ -4,3 +4,4 @@ dist
 .DS_Store
 e2e/screenshots
 no-mercy.zip
+.voice-models

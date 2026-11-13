@@ -3,3 +3,4 @@ node_modules
 client/dist
 e2e/screenshots
 .git
+.voice-models

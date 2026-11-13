@@ -1,0 +1,63 @@
+{
+  "roundWin": [
+    "Toma!",
+    "É minha!",
+    "Essa é minha, hein!",
+    "Vem pro papai!",
+    "Pode vir!",
+    "Sem piedade!",
+    "Facinho!",
+    "Anota aí!"
+  ],
+  "yourTurn": [
+    "Sua vez, parceiro.",
+    "Vai lá, mostra o que tem.",
+    "A mesa tá esperando.",
+    "E aí, vai de quê?"
+  ],
+  "lostRound": [
+    "Essa doeu.",
+    "Passou raspando.",
+    "Levaram a sua.",
+    "Ih, rapaz."
+  ],
+  "handHit": [
+    "Toma essa, pilantra!",
+    "Na mosca, meu filho!",
+    "É o pai que tá on!",
+    "Aprende comigo, aprende!",
+    "Isso aqui é NO MERCY!",
+    "Chora não, que dói mais!",
+    "Calculado, parceiro!",
+    "Profissional é outra coisa!"
+  ],
+  "handMiss": [
+    "Aaah, safado!",
+    "Me roubaram, gente!",
+    "Que vacilo, meu Deus!",
+    "Isso foi sorte sua, hein!",
+    "Não acredito nisso!",
+    "Hoje não é meu dia...",
+    "Ô carta ruim, sô!",
+    "Vou me vingar, viu!"
+  ],
+  "zoar": [
+    "Toma, tóxa!",
+    "Toma essa, tóxa!",
+    "Engole essa!",
+    "Pega, que é tua!",
+    "Sentiu o golpe?",
+    "Foi de base, hein!",
+    "Tá com medinho?",
+    "Vai chorar?",
+    "Chupa essa!",
+    "Senta lá, Cláudio!",
+    "Volta pra escolinha!",
+    "Aqui não, parceiro!"
+  ],
+  "champion": [
+    "Campeão, sem piedade!",
+    "Respeita o rei da mesa!",
+    "Podem me chamar de mestre!"
+  ]
+}

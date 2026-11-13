@@ -196,6 +196,79 @@ class AudioEngine {
     src.stop(start + dur + 0.02);
   }
 
+  // ---------- Vozes com acústica de bar ----------
+  private barReverb: ConvolverNode | null = null;
+  private voiceBus: GainNode | null = null;
+  private voiceEnd = 0;
+  private voiceSources = new Set<AudioBufferSourceNode>();
+
+  /** Para imediatamente todas as falas (botão de mutar vozes). */
+  stopVoices() {
+    for (const s of this.voiceSources) {
+      try {
+        s.stop();
+      } catch {
+        /* já parou */
+      }
+    }
+    this.voiceSources.clear();
+    this.voiceEnd = 0;
+  }
+
+  /** Resposta de impulso sintética de um salão de bar: madeira, teto baixo, cauda curta (~1,2 s). */
+  private ensureVoiceChain() {
+    if (!this.ctx || this.voiceBus) return;
+    const ctx = this.ctx;
+    const len = Math.floor(ctx.sampleRate * 1.2);
+    const ir = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = ir.getChannelData(ch);
+      for (let i = 0; i < len; i++) {
+        const t = i / len;
+        // reflexões iniciais (paredes próximas) + cauda que decai
+        const early = i < ctx.sampleRate * 0.04 && Math.random() < 0.02 ? 0.6 : 0;
+        d[i] = ((Math.random() * 2 - 1) * Math.pow(1 - t, 3.2) + early) * 0.5;
+      }
+    }
+    this.barReverb = ctx.createConvolver();
+    this.barReverb.buffer = ir;
+    const wet = ctx.createGain();
+    wet.gain.value = 0.28;
+    const tone = ctx.createBiquadFilter(); // um pouco abafado, como num salão com gente
+    tone.type = 'lowpass';
+    tone.frequency.value = 7000;
+    this.voiceBus = ctx.createGain();
+    this.voiceBus.connect(tone);
+    tone.connect(this.master);
+    this.barReverb.connect(wet);
+    wet.connect(this.voiceBus);
+  }
+
+  /**
+   * Toca uma fala gravada com o eco do bar. Retorna false se não puder tocar agora.
+   * `priority: 'low'` não toca se já houver alguém falando; 'high' entra na fila.
+   */
+  playVoice(buf: AudioBuffer, volume: number, priority: 'low' | 'high'): boolean {
+    if (!this.ctx) return false;
+    this.ensureVoiceChain();
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    if (priority === 'low' && this.voiceEnd > now) return true;
+    const start = Math.max(now + 0.02, this.voiceEnd + 0.15);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const g = ctx.createGain();
+    g.gain.value = volume;
+    src.connect(g);
+    g.connect(this.voiceBus!);
+    g.connect(this.barReverb!);
+    src.start(start);
+    this.voiceSources.add(src);
+    src.onended = () => this.voiceSources.delete(src);
+    this.voiceEnd = start + buf.duration;
+    return true;
+  }
+
   // ---------- Efeitos ----------
   play(name: Sfx) {
     if (!this.ctx || !settings.sfxOn || settings.sfxVolume <= 0) return;

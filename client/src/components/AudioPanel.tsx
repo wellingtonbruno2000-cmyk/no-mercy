@@ -1,7 +1,7 @@
 import { Headphones, MessageCircle, Mic, MicOff, Music, Settings2, Sparkles, Volume2, VolumeX } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { RoomView } from '@nomercy/shared';
-import { updateAudioSettings, useAudioSettings } from '../lib/audio';
+import { engine, updateAudioSettings, useAudioSettings } from '../lib/audio';
 import { pickPhrase, speak, useNarratorVoices } from '../lib/taunts';
 import {
   changeMicDevice,
@@ -174,7 +174,7 @@ export function AudioPanel({ open, onClose, room }: { open: boolean; onClose: ()
                 onChange={(e) => updateAudioSettings({ narratorVoice: e.target.value })}
                 aria-label="Voz do narrador"
               >
-                <option value="">Voz automática (melhor disponível)</option>
+                <option value="">Vozes do bar (IA, com eco de salão)</option>
                 {voices.map((v) => (
                   <option key={v.voiceURI} value={v.voiceURI}>
                     {v.name}
@@ -223,7 +223,10 @@ export function AudioButtons({ room }: { room: RoomView | null }) {
       <button
         className={btn}
         onClick={() => {
-          if (s.tauntVoiceOn) window.speechSynthesis?.cancel(); // para na hora o que estiver falando
+          if (s.tauntVoiceOn) {
+            window.speechSynthesis?.cancel(); // para na hora o que estiver falando
+            engine.stopVoices();
+          }
           updateAudioSettings({ tauntVoiceOn: !s.tauntVoiceOn });
         }}
         aria-label={s.tauntVoiceOn ? 'Mutar vozes das frases' : 'Ativar vozes das frases'}
