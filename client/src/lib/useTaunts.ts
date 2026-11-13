@@ -15,18 +15,27 @@ export function useTaunts(room: RoomView | null) {
     const seat = (id: string) => Math.max(0, g.players.findIndex((p) => p.id === id));
     const handKey = `${g.stage}-${g.handNumber}-${g.tiebreakNumber}`;
 
-    // Venceu a rodada: balão curto (sem voz, para não ficar repetitivo)
+    // Venceu a rodada: se derrubou uma carta forte de alguém (9, 10 ou coringa), zoa com "Toma, tóxa!".
     if (g.phase === 'ROUND_RESULT' && before.phase !== 'ROUND_RESULT' && g.lastRound) {
       const w = g.lastRound.winnerId;
-      say(w, pickPhrase('roundWin', `${handKey}-${g.lastRound.roundNumber}-${w}`), 2200);
+      const seed = `${handKey}-${g.lastRound.roundNumber}-${w}`;
+      const beatStrong = g.lastRound.plays.some(
+        (p) => p.playerId !== w && (p.card.value === 'JOKER' ? p.jokerMode === 'MAX' : (p.card.value as number) >= 9),
+      );
+      const text = pickPhrase(beatStrong ? 'zoar' : 'roundWin', seed);
+      say(w, text, 2400);
+      if (beatStrong && w === me) speak(text, 0); // você derrubou alguém: o narrador fala
     }
 
     // Fim da partida: quem acertou provoca, quem errou reclama
     if (g.phase === 'HAND_RESULT' && before.phase !== 'HAND_RESULT' && g.lastHandResult) {
       const rec = g.lastHandResult;
+      const someoneMissed = rec.participants.some((id) => rec.points[id] === 0);
       const lines = rec.participants.map((id) => {
         const hit = rec.points[id] > 0;
-        return { id, hit, text: pickPhrase(hit ? 'handHit' : 'handMiss', `${handKey}-${id}`) };
+        // Quem acertou enquanto outro errou às vezes zoa ("Toma, tóxa!"); senão comemora.
+        const kind = hit ? (someoneMissed && pickPhrase('zoar', `${handKey}-${id}`).length % 2 === 0 ? 'zoar' : 'handHit') : 'handMiss';
+        return { id, hit, text: pickPhrase(kind, `${handKey}-${id}`) };
       });
       for (const l of lines) say(l.id, l.text, 6500);
       // Narra a sua frase e a de um adversário (para não falar todo mundo ao mesmo tempo)

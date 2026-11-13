@@ -228,6 +228,18 @@ export function AudioButtons({ room }: { room: RoomView | null }) {
       )}
       <button
         className={btn}
+        onClick={() => {
+          if (s.tauntVoiceOn) window.speechSynthesis?.cancel(); // para na hora o que estiver falando
+          updateAudioSettings({ tauntVoiceOn: !s.tauntVoiceOn });
+        }}
+        aria-label={s.tauntVoiceOn ? 'Mutar vozes das frases' : 'Ativar vozes das frases'}
+        title={s.tauntVoiceOn ? 'Mutar vozes das frases' : 'Ativar vozes das frases'}
+        data-testid="mute-voices"
+      >
+        {s.tauntVoiceOn ? <Volume2 size={20} /> : <VolumeX size={20} className="text-rose-300" />}
+      </button>
+      <button
+        className={btn}
         onClick={() => updateAudioSettings({ musicOn: !s.musicOn })}
         aria-label={s.musicOn ? 'Desligar música' : 'Ligar música'}
         title={s.musicOn ? 'Desligar música' : 'Ligar música'}

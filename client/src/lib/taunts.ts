@@ -27,6 +27,21 @@ export const PHRASES = {
     'Ô carta ruim, sô!',
     'Vou me vingar, viu!',
   ],
+  /** Quando você derruba alguém (vence uma carta forte, ou faz o outro errar o palpite). */
+  zoar: [
+    'Toma, tóxa!',
+    'Toma essa, tóxa!',
+    'Engole essa!',
+    'Pega, que é tua!',
+    'Sentiu o golpe?',
+    'Foi de base, hein!',
+    'Tá com medinho?',
+    'Vai chorar?',
+    'Chupa essa!',
+    'Senta lá, Cláudio!',
+    'Volta pra escolinha!',
+    'Aqui não, parceiro!',
+  ],
   champion: ['Campeão, sem piedade!', 'Respeita o rei da mesa!', 'Podem me chamar de mestre!'],
 } as const;
 
