@@ -1,0 +1,24 @@
+{
+  "name": "no-mercy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NO MERCY — jogo de cartas estratégico multiplayer",
+  "type": "module",
+  "workspaces": ["shared", "server", "client"],
+  "scripts": {
+    "dev": "concurrently -n server,client -c magenta,cyan \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w client",
+    "start": "npm run start -w server",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "node e2e/smoke.mjs",
+    "typecheck": "npm run typecheck -w shared && npm run typecheck -w server && npm run typecheck -w client"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "concurrently": "9.1.0",
+    "typescript": "5.7.2",
+    "vitest": "2.1.8"
+  },
+  "engines": { "node": ">=20" }
+}

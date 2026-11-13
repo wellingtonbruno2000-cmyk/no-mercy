@@ -1,0 +1,15 @@
+# Publicação automática no Render (plano gratuito): New + > Blueprint > escolha este repositório.
+services:
+  - type: web
+    name: no-mercy
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # Depois do primeiro deploy, troque pelo endereço real do seu site (ex.: https://no-mercy-abcd.onrender.com)
+      - key: SITE_URL
+        sync: false
+      # Código de verificação do Google Search Console (opcional)
+      - key: GOOGLE_SITE_VERIFICATION
+        sync: false
