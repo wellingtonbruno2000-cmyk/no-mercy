@@ -59,5 +59,66 @@
     "Campeão, sem piedade!",
     "Respeita o rei da mesa!",
     "Podem me chamar de mestre!"
+  ],
+  "claims": [
+    "Uma carta azul",
+    "Duas cartas azuis",
+    "Três cartas azuis",
+    "Uma carta vermelha",
+    "Duas cartas vermelhas",
+    "Três cartas vermelhas",
+    "Uma carta verde",
+    "Duas cartas verdes",
+    "Três cartas verdes",
+    "Uma carta amarela",
+    "Duas cartas amarelas",
+    "Três cartas amarelas"
+  ],
+  "callLie": [
+    "MENTIRA!",
+    "Mentira, seu safado!",
+    "Mentirosinho!",
+    "Para de mentir!",
+    "Sou um cachorro se for verdade!",
+    "Duvido!",
+    "Tá blefando, hein!",
+    "Conta outra!",
+    "Essa nem minha vó cai!",
+    "Mentiroso de carteirinha!",
+    "Abre essas cartas aí!",
+    "Nariz de Pinóquio crescendo!"
+  ],
+  "spin": [
+    "Gira o tambor...",
+    "Hora da verdade...",
+    "Respira fundo..."
+  ],
+  "survive": [
+    "Clique... escapei!",
+    "Ufa, ainda tô vivo!",
+    "Hoje não!",
+    "Sorte grande, hein!"
+  ],
+  "out": [
+    "Tá fora!",
+    "Já era, parceiro!",
+    "Sem piedade!"
+  ],
+  "caughtLie": [
+    "Pego na mentira!",
+    "Era blefe!"
+  ],
+  "wasTruth": [
+    "Era verdade!",
+    "Acusou errado!"
+  ],
+  "specialCard": [
+    "O Coringa Preto! Todo mundo pra roleta!"
+  ],
+  "tableColor": [
+    "A cor da mesa é azul",
+    "A cor da mesa é vermelha",
+    "A cor da mesa é verde",
+    "A cor da mesa é amarela"
   ]
 }

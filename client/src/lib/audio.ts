@@ -95,7 +95,12 @@ export type Sfx =
   | 'gameOver'
   | 'tiebreak'
   | 'join'
-  | 'shuffle';
+  | 'shuffle'
+  | 'spin'
+  | 'click'
+  | 'bang'
+  | 'heartbeat'
+  | 'lie';
 
 const NOTE = (n: number) => 440 * Math.pow(2, (n - 69) / 12); // MIDI -> Hz
 
@@ -329,6 +334,34 @@ class AudioEngine {
         }
         this.tone(b, 160, t + 0.85, 0.05, { gain: 0.2, slideTo: 80, release: 0.05 });
         this.noiseHit(b, t + 0.85, 0.06, { gain: 0.25, freq: 900, q: 0.8 });
+        break;
+      case 'spin':
+        // tambor girando: catraca que desacelera
+        for (let i = 0; i < 18; i++) {
+          const k = i / 18;
+          this.noiseHit(b, t + k * k * 1.1, 0.02, { gain: 0.22, freq: 3200, q: 3 });
+          this.tone(b, 900, t + k * k * 1.1, 0.012, { type: 'square', gain: 0.03, release: 0.02 });
+        }
+        break;
+      case 'click':
+        this.noiseHit(b, t, 0.03, { gain: 0.5, freq: 2500, q: 2 });
+        this.tone(b, 1400, t, 0.015, { type: 'square', gain: 0.08, release: 0.02 });
+        break;
+      case 'bang':
+        // estouro estilizado de desenho (sem realismo): pancada grave + chiado curto
+        this.tone(b, 120, t, 0.25, { gain: 0.6, slideTo: 35, release: 0.3 });
+        this.noiseHit(b, t, 0.5, { gain: 0.5, freq: 1200, q: 0.3, type: 'lowpass' });
+        this.noiseHit(b, t + 0.02, 0.18, { gain: 0.25, freq: 5000, q: 0.5, type: 'highpass' });
+        break;
+      case 'heartbeat':
+        for (let i = 0; i < 3; i++) {
+          this.tone(b, 60, t + i * 0.7, 0.08, { gain: 0.4, slideTo: 40, release: 0.08 });
+          this.tone(b, 55, t + i * 0.7 + 0.2, 0.08, { gain: 0.3, slideTo: 38, release: 0.08 });
+        }
+        break;
+      case 'lie':
+        this.tone(b, NOTE(70), t, 0.08, { type: 'square', gain: 0.1, filter: 2500 });
+        this.tone(b, NOTE(66), t + 0.09, 0.2, { type: 'square', gain: 0.1, filter: 2500 });
         break;
       case 'join':
         this.tone(b, NOTE(79), t, 0.08, { type: 'sine', gain: 0.12 });

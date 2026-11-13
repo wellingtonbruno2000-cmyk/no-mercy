@@ -1,10 +1,19 @@
 import type { JokerMode, PlayerView } from './types';
+import type { BluffView, BotLevel } from './bluff';
 
 export type RoomStatus = 'LOBBY' | 'PLAYING' | 'FINISHED';
+
+export type GameMode = 'classic' | 'roleta';
 
 export interface RoomSettings {
   /** Tempo por jogada em segundos (0 = sem limite). */
   turnSeconds: number;
+  /** Modo de jogo: clássico NO MERCY ou "Roleta Sem Piedade" (blefe com roleta). */
+  mode: GameMode;
+  /** Roleta: Coringa Preto ativo (se acusado, todos menos quem jogou giram a roleta). */
+  special: boolean;
+  /** Dificuldade dos bots (todos os modos). */
+  botLevel: BotLevel;
 }
 
 export const TURN_SECONDS_OPTIONS = [0, 30, 60, 90] as const;
@@ -36,6 +45,8 @@ export interface RoomView {
   settings: RoomSettings;
   status: RoomStatus;
   game: PlayerView | null;
+  /** Partida do modo Roleta Sem Piedade (quando ativa). */
+  bluff: BluffView | null;
   /** Prazo (epoch ms) da ação atual ou da transição automática. */
   deadline: number | null;
   serverTime: number;
@@ -44,7 +55,12 @@ export interface RoomView {
 export type Ack<T = object> = (res: ({ ok: true } & T) | { ok: false; error: string }) => void;
 
 export interface ClientToServerEvents {
-  'room:create': (p: { name: string; solo?: boolean; botCount?: number; code?: string }, ack: Ack<{ code: string }>) => void;
+  'room:create': (
+    p: { name: string; solo?: boolean; botCount?: number; code?: string; mode?: GameMode; special?: boolean; botLevel?: BotLevel },
+    ack: Ack<{ code: string }>,
+  ) => void;
+  'bluff:play': (p: { cardIds: string[] }, ack?: Ack) => void;
+  'bluff:call': (ack?: Ack) => void;
   'room:join': (p: { code: string; name: string }, ack: Ack<{ code: string }>) => void;
   'room:leave': (ack?: Ack) => void;
   'room:addBot': (ack?: Ack) => void;

@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion';
 import { Bot, BookOpen, Download, RotateCcw, Share, DoorOpen, Loader2, Plus, Users, Wifi, WifiOff } from 'lucide-react';
 import { useState } from 'react';
-import { APP_VERSION, MAX_PLAYERS, MIN_PLAYERS, maxHandsFor } from '@nomercy/shared';
+import { APP_VERSION, BLUFF_MAX, MAX_PLAYERS, MIN_PLAYERS, maxHandsFor, type BotLevel, type GameMode } from '@nomercy/shared';
+import { ModePicker } from './ModePicker';
 import { discardSavedGame, forgetLastRoom, getSavedName, resumeGame, returnToLastRoom, saveName, send, useStore } from '../lib/store';
 import { FloatingCards } from './FloatingCards';
 import { BarAmbience } from './BarAmbience';
@@ -18,6 +19,9 @@ export function Home() {
   const [code, setCode] = useState(initialCode);
   const [mode, setMode] = useState<'none' | 'solo' | 'join'>(initialCode ? 'join' : 'none');
   const [players, setPlayers] = useState(4);
+  const [gameMode, setGameMode] = useState<GameMode>('classic');
+  const [botLevel, setBotLevel] = useState<BotLevel>('hard');
+  const [special, setSpecial] = useState(true);
   const [busy, setBusy] = useState(false);
   const [rules, setRules] = useState(false);
   const [iosTip, setIosTip] = useState(false);
@@ -140,9 +144,22 @@ export function Home() {
       </div>
 
       <Modal open={mode === 'solo'} onClose={() => setMode('none')} title="Jogar contra bots">
+        <div className="mb-4">
+          <ModePicker
+            mode={gameMode}
+            onMode={(m) => {
+              setGameMode(m);
+              if (m === 'roleta' && players > 6) setPlayers(6);
+            }}
+            level={botLevel}
+            onLevel={setBotLevel}
+            special={special}
+            onSpecial={setSpecial}
+          />
+        </div>
         <p className="mb-3 text-sm text-mist/70">Quantos jogadores na mesa (você + bots)?</p>
         <div className="grid grid-cols-7 gap-1.5">
-          {Array.from({ length: MAX_PLAYERS - MIN_PLAYERS + 1 }, (_, i) => i + MIN_PLAYERS).map((n) => (
+          {Array.from({ length: (gameMode === 'roleta' ? BLUFF_MAX : MAX_PLAYERS) - MIN_PLAYERS + 1 }, (_, i) => i + MIN_PLAYERS).map((n) => (
             <button
               key={n}
               onClick={() => setPlayers(n)}
@@ -155,12 +172,13 @@ export function Home() {
           ))}
         </div>
         <p className="mt-3 flex items-center gap-2 text-sm text-mist/60">
-          <Users size={16} /> {players - 1} {players - 1 === 1 ? 'bot' : 'bots'} · {maxHandsFor(players)} partidas{players <= 4 ? ' · mesa 3D' : ''}
+          <Users size={16} /> {players - 1} {players - 1 === 1 ? 'bot' : 'bots'} ·{' '}
+          {gameMode === 'roleta' ? 'último de pé vence' : `${maxHandsFor(players)} partidas${players <= 4 ? ' · mesa 3D' : ''}`}
         </p>
         <button
           className="btn-primary mt-5 w-full"
           disabled={busy || !connected}
-          onClick={() => run(() => send('room:create', { name: cleanName, solo: true, botCount: players - 1 }))}
+          onClick={() => run(() => send('room:create', { name: cleanName, solo: true, botCount: players - 1, mode: gameMode, special, botLevel }))}
         >
           {busy ? <Loader2 className="animate-spin" /> : <Bot />} Começar
         </button>

@@ -123,6 +123,27 @@ export function decideBid(view: PlayerView): number {
   return chooseAmongAllowed(Math.round(target), allowed.slice().sort((a, b) => Math.abs(a - target) - Math.abs(b - target)));
 }
 
+export type ClassicBotLevel = 'easy' | 'normal' | 'hard';
+
+/** Palpite com dificuldade: difícil = IA completa; normal/fácil erram de propósito às vezes. */
+export function botBid(view: PlayerView, level: ClassicBotLevel = 'hard', randomInt: (m: number) => number = (m) => Math.floor(Math.random() * m)): number {
+  const allowed = view.allowedBids ?? [];
+  const noise = level === 'easy' ? 50 : level === 'normal' ? 20 : 0;
+  if (allowed.length && randomInt(100) < noise) return allowed[randomInt(allowed.length)];
+  return decideBid(view);
+}
+
+/** Jogada com dificuldade. */
+export function botPlay(view: PlayerView, level: ClassicBotLevel = 'hard', randomInt: (m: number) => number = (m) => Math.floor(Math.random() * m)): BotPlay {
+  const noise = level === 'easy' ? 45 : level === 'normal' ? 15 : 0;
+  const cards = view.myHand.filter((c): c is Card => !isHiddenCard(c));
+  if (cards.length && randomInt(100) < noise) {
+    const c = cards[randomInt(cards.length)];
+    return { cardId: c.id, jokerMode: isJoker(c) ? (view.blind ? 'MAX' : randomInt(2) ? 'MAX' : 'MIN') : null };
+  }
+  return decidePlay(view);
+}
+
 export function decidePlay(view: PlayerView): BotPlay {
   const cards = myCards(view);
   if (cards.length === 0) throw new Error('Bot sem cartas');

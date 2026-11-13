@@ -6,6 +6,7 @@ import { Logo } from './Logo';
 import { Avatar } from './Avatar';
 import { BarAmbience } from './BarAmbience';
 import { AudioButtons } from './AudioPanel';
+import { ModePicker } from './ModePicker';
 
 export function Lobby({ room }: { room: RoomView }) {
   const isHost = room.hostId === room.you;
@@ -152,6 +153,19 @@ export function Lobby({ room }: { room: RoomView }) {
         )}
       </section>
 
+      <section className="panel p-4 sm:p-5" data-testid="lobby-mode">
+        <ModePicker
+          mode={room.settings.mode ?? 'classic'}
+          onMode={(mode) => send('room:settings', { mode })}
+          level={room.settings.botLevel ?? 'hard'}
+          onLevel={(botLevel) => send('room:settings', { botLevel })}
+          special={room.settings.special ?? true}
+          onSpecial={(special) => send('room:settings', { special })}
+          disabled={!isHost}
+        />
+        {!isHost && <p className="mt-2 text-xs text-mist/50">Só o anfitrião escolhe o modo e a dificuldade.</p>}
+      </section>
+
       <section className="panel p-4 sm:p-5">
         <h2 className="mb-3 flex items-center gap-2 font-bold text-white">
           <Timer size={18} /> Tempo por jogada
@@ -176,7 +190,7 @@ export function Lobby({ room }: { room: RoomView }) {
       {isHost && (
         <button className="btn-gold sticky bottom-4 py-4 text-lg" disabled={count < MIN_PLAYERS} onClick={() => send('game:start')}>
           <Play size={22} fill="currentColor" />
-          {count < MIN_PLAYERS ? `Falta ${MIN_PLAYERS - count} jogador` : `Iniciar jogo (${count} jogadores${count <= 4 ? ' · mesa 3D' : ''})`}
+          {count < MIN_PLAYERS ? `Falta ${MIN_PLAYERS - count} jogador` : room.settings.mode === 'roleta' && count > 6 ? 'Roleta: máximo de 6 jogadores' : `Iniciar ${room.settings.mode === 'roleta' ? 'Roleta' : 'jogo'} (${count} jogadores${room.settings.mode !== 'roleta' && count <= 4 ? ' · mesa 3D' : ''})`}
         </button>
       )}
     </div>

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { io as connect, type Socket } from 'socket.io-client';
 import {
+  decideBluff,
   decideBid,
   decidePlay,
   isHiddenCard,
@@ -290,5 +291,33 @@ describe('multiplayer', () => {
     expect(gotB).toEqual([{ playerId: a.last!.you, x: 0.5, y: -0.25 }]);
     expect(gotOut).toEqual([]);
     for (const c of [a, b, out]) c.socket.disconnect();
+  });
+
+  it('modo Roleta Sem Piedade: partida solo com bots até sobrar um', async () => {
+    const c = await client();
+    const res = await emit<{ code: string }>(c, 'room:create', { name: 'Solo', solo: true, botCount: 3, mode: 'roleta' });
+    expect(res.ok).toBe(true);
+    const v = await waitFor(c, (x) => x.status === 'PLAYING' && !!x.bluff);
+    expect(v.settings.mode).toBe('roleta');
+    expect(v.bluff!.myHand).toHaveLength(5);
+    expect(JSON.stringify(v)).not.toContain('bullet');
+    let busy = false;
+    const act = async (x: typeof v) => {
+      const b = x.bluff;
+      if (!b || busy || b.phase !== 'TURN' || b.turnId !== x.you) return;
+      busy = true;
+      const d = decideBluff(b);
+      const r = d.call ? await emit(c, 'bluff:call') : await emit(c, 'bluff:play', { cardIds: d.cardIds });
+      busy = false;
+      expect(r.ok).toBe(true);
+      if (c.last) void act(c.last);
+    };
+    c.socket.on('room:update', (x) => void act(x));
+    void act(c.last!);
+    const end = await waitFor(c, (x) => x.status === 'FINISHED', 50000);
+    expect(end.bluff!.phase).toBe('GAME_OVER');
+    expect(end.bluff!.winnerId).toBeTruthy();
+    expect(Object.values(end.bluff!.alive).filter(Boolean)).toHaveLength(1);
+    c.socket.disconnect();
   });
 });

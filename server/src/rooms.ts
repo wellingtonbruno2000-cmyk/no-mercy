@@ -2,8 +2,8 @@ import {
   advance,
   createGame,
   currentActorId,
-  decideBid,
-  decidePlay,
+  botBid,
+  botPlay,
   GameError,
   getPlayerView,
   MAX_PLAYERS,
@@ -11,6 +11,15 @@ import {
   placeBid,
   playCard,
   TURN_SECONDS_OPTIONS,
+  BLUFF_MAX,
+  advanceBluff,
+  bluffActorId,
+  bluffCall,
+  bluffPlay,
+  createBluffGame,
+  decideBluff,
+  getBluffView,
+  type BluffState,
   type GameState,
   type JokerMode,
   type RandomInt,
@@ -52,6 +61,7 @@ export interface Room {
   settings: RoomSettings;
   status: RoomStatus;
   game: GameState | null;
+  bluff: BluffState | null;
   timer: ReturnType<typeof setTimeout> | null;
   deadline: number | null;
   emptySince: number | null;
@@ -67,6 +77,7 @@ export interface SavedRoom {
   settings: RoomSettings;
   status: RoomStatus;
   game: GameState | null;
+  bluff?: BluffState | null;
   botCounter: number;
 }
 
@@ -150,7 +161,8 @@ export class RoomManager {
       code: reuse ? wanted : this.newCode(),
       hostId: playerId,
       members: [{ id: playerId, name: sanitizeName(name), isBot: false, connected: true, autopilot: false, voice: false, micOn: false }],
-      settings: { turnSeconds: 0 },
+      settings: { turnSeconds: 0, mode: 'classic', special: true, botLevel: 'hard' },
+      bluff: null,
       status: 'LOBBY',
       game: null,
       timer: null,
@@ -341,6 +353,15 @@ export class RoomManager {
   updateSettings(playerId: string, patch: Partial<RoomSettings>) {
     const room = this.requireHost(playerId);
     if (room.status !== 'LOBBY') throw new RoomError('As configurações só podem mudar antes da partida.');
+    if (patch.mode !== undefined) {
+      if (patch.mode !== 'classic' && patch.mode !== 'roleta') throw new RoomError('Modo inválido.');
+      room.settings.mode = patch.mode;
+    }
+    if (patch.special !== undefined) room.settings.special = !!patch.special;
+    if (patch.botLevel !== undefined) {
+      if (!['easy', 'normal', 'hard'].includes(patch.botLevel)) throw new RoomError('Dificuldade inválida.');
+      room.settings.botLevel = patch.botLevel;
+    }
     if (patch.turnSeconds !== undefined) {
       if (!(TURN_SECONDS_OPTIONS as readonly number[]).includes(patch.turnSeconds)) {
         throw new RoomError('Tempo por jogada inválido.');
@@ -364,6 +385,17 @@ export class RoomManager {
     if (room.members.length < MIN_PLAYERS) {
       throw new RoomError(`São necessários pelo menos ${MIN_PLAYERS} jogadores. Complete com bots.`);
     }
+    const infos = room.members.map((m) => ({ id: m.id, name: m.name, isBot: m.isBot }));
+    if (room.settings.mode === 'roleta') {
+      if (infos.length > BLUFF_MAX) throw new RoomError(`O modo Roleta aceita até ${BLUFF_MAX} jogadores.`);
+      room.game = null;
+      room.bluff = createBluffGame(infos, { special: room.settings.special, randomInt: this.randomInt });
+      room.status = 'PLAYING';
+      this.hooks.onChange(room);
+      this.schedule(room);
+      return;
+    }
+    room.bluff = null;
     room.game = createGame(
       room.members.map((m) => ({ id: m.id, name: m.name, isBot: m.isBot })),
       { randomInt: this.randomInt },
@@ -379,6 +411,7 @@ export class RoomManager {
     room.members = room.members.filter((m) => !m.autopilot && (m.isBot || this.playerRoom.get(m.id) === room.code));
     room.status = 'LOBBY';
     room.game = null;
+    room.bluff = null;
     room.deadline = null;
     this.clearTimer(room);
     this.hooks.onChange(room);
@@ -400,8 +433,25 @@ export class RoomManager {
     this.afterAction(room);
   }
 
+  /** Roleta: jogar cartas viradas (dizendo que são da cor da mesa). */
+  bluffPlay(playerId: string, cardIds: string[]) {
+    const room = this.requireRoom(playerId);
+    if (!room.bluff) throw new RoomError('Nenhuma partida de Roleta em andamento.');
+    room.bluff = bluffPlay(room.bluff, playerId, Array.isArray(cardIds) ? cardIds.map(String) : []);
+    this.afterAction(room);
+  }
+
+  /** Roleta: acusar a última jogada ("MENTIRA!"). */
+  bluffCall(playerId: string) {
+    const room = this.requireRoom(playerId);
+    if (!room.bluff) throw new RoomError('Nenhuma partida de Roleta em andamento.');
+    room.bluff = bluffCall(room.bluff, playerId);
+    this.afterAction(room);
+  }
+
   private afterAction(room: Room) {
     if (room.game?.phase === 'GAME_OVER') room.status = 'FINISHED';
+    if (room.bluff?.phase === 'GAME_OVER') room.status = 'FINISHED';
     this.schedule(room);
     this.hooks.onChange(room);
   }
@@ -431,6 +481,10 @@ export class RoomManager {
   /** Agenda a próxima ação automática (bots, transições, tempo esgotado, desconexão). */
   schedule(room: Room) {
     this.clearTimer(room);
+    if (room.bluff) {
+      this.scheduleBluff(room);
+      return;
+    }
     const game = room.game;
     if (!game || room.status !== 'PLAYING') return;
     const t = this.timings;
@@ -461,6 +515,51 @@ export class RoomManager {
     }
   }
 
+  private levelFor(room: Room, id: string) {
+    const m = room.members.find((x) => x.id === id);
+    return m?.isBot ? room.settings.botLevel ?? 'hard' : 'hard';
+  }
+
+  /** Roleta: revelação e disparos com pausas para o suspense; bots e tempo esgotado. */
+  private scheduleBluff(room: Room) {
+    const b = room.bluff!;
+    if (room.status !== 'PLAYING' || b.phase === 'GAME_OVER') return;
+    const t = this.timings;
+    const scale = t.roundResultMs / DEFAULT_TIMINGS.roundResultMs; // acompanha TIMING_SCALE
+    const adv = () => {
+      room.bluff = advanceBluff(room.bluff!, this.randomInt);
+    };
+    if (b.phase === 'REVEAL') return this.setTimer(room, Math.max(1, Math.round(3200 * scale)), adv, false);
+    if (b.phase === 'ROULETTE') {
+      // antes de cada disparo: suspense; depois do último: pausa para ver o resultado e nova rodada
+      const ms = b.shootQueue.length ? 3400 : 2600;
+      return this.setTimer(room, Math.max(1, Math.round(ms * scale)), adv, false);
+    }
+    const actorId = bluffActorId(b);
+    if (!actorId) return;
+    const member = room.members.find((m) => m.id === actorId);
+    const act = () => this.autoActBluff(room, actorId);
+    const firstOfRound = !b.lastPlay ? t.dealMs : 0;
+    if (!member || member.isBot || member.autopilot) {
+      const delay = firstOfRound + t.botDelayMin + Math.floor(Math.random() * Math.max(1, t.botDelayMax - t.botDelayMin)) + Math.round(600 * scale);
+      this.setTimer(room, delay, act, false);
+    } else if (!member.connected) {
+      this.setTimer(room, t.disconnectGraceMs, act, true);
+    } else if (room.settings.turnSeconds > 0) {
+      this.setTimer(room, room.settings.turnSeconds * 1000, act, true);
+    }
+  }
+
+  private autoActBluff(room: Room, actorId: string) {
+    const b = room.bluff!;
+    if (bluffActorId(b) !== actorId) return;
+    const member = room.members.find((m) => m.id === actorId);
+    // Bots usam a dificuldade da sala; humano ausente joga no difícil (não prejudica quem saiu).
+    const level = member?.isBot ? room.settings.botLevel ?? 'hard' : 'hard';
+    const d = decideBluff(getBluffView(b, actorId), this.randomInt, level);
+    room.bluff = d.call ? bluffCall(b, actorId) : bluffPlay(b, actorId, d.cardIds);
+  }
+
   /** Executa a jogada do bot (ou de um humano ausente) com a IA, usando somente a visão desse jogador. */
   private autoAct(room: Room, actorId: string) {
     const game = room.game!;
@@ -469,7 +568,7 @@ export class RoomManager {
     if (game.phase === 'BIDDING') {
       let value: number;
       try {
-        value = decideBid(view);
+        value = botBid(view, this.levelFor(room, actorId), this.randomInt);
       } catch {
         value = view.allowedBids![0];
       }
@@ -481,7 +580,7 @@ export class RoomManager {
       }
     } else if (game.phase === 'PLAYING') {
       try {
-        const d = decidePlay(view);
+        const d = botPlay(view, this.levelFor(room, actorId), this.randomInt);
         room.game = playCard(game, actorId, d.cardId, d.jokerMode);
       } catch (e) {
         if (!(e instanceof GameError) && !(e instanceof Error)) throw e;
@@ -502,6 +601,7 @@ export class RoomManager {
       settings: { ...room.settings },
       status: room.status,
       game: room.game,
+      bluff: room.bluff,
       botCounter: room.botCounter,
     };
   }
@@ -511,7 +611,7 @@ export class RoomManager {
    * Retorna a sala (nova ou já existente) se o jogador fizer parte dela.
    */
   restoreRoom(saved: SavedRoom, playerId: string): Room | null {
-    if (!saved || saved.v !== 1 || !saved.game || saved.status !== 'PLAYING') return null;
+    if (!saved || saved.v !== 1 || !(saved.game || saved.bluff) || saved.status !== 'PLAYING') return null;
     if (Date.now() - saved.savedAt > 48 * 60 * 60 * 1000) return null; // cópias com mais de 48 h expiram
     const member = saved.members.find((m) => m.id === playerId && !m.isBot);
     if (!member || member.autopilot) return null;
@@ -536,6 +636,7 @@ export class RoomManager {
       settings: { ...saved.settings },
       status: 'PLAYING',
       game: saved.game,
+      bluff: saved.bluff ?? null,
       timer: null,
       deadline: null,
       emptySince: null,
@@ -557,6 +658,7 @@ export class RoomManager {
       settings: { ...room.settings },
       status: room.status,
       game: room.game ? getPlayerView(room.game, playerId) : null,
+      bluff: room.bluff ? getBluffView(room.bluff, playerId) : null,
       deadline: room.deadline,
       serverTime: Date.now(),
     };

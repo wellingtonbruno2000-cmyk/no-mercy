@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { Server, type Socket } from 'socket.io';
-import { APP_VERSION, GameError, type Ack, type ClientToServerEvents, type ServerToClientEvents } from '@nomercy/shared';
+import { APP_VERSION, BluffError, GameError, type Ack, type ClientToServerEvents, type ServerToClientEvents } from '@nomercy/shared';
 import { DEFAULT_TIMINGS, RoomError, RoomManager, type Room, type SavedRoom, type Timings } from './rooms';
 import { open as openSnapshot, playerIdFromToken, seal } from './snapshot';
 
@@ -163,7 +163,7 @@ export async function startServer(opts: ServerOptions = {}) {
           const result = fn(...(args.slice(0, -1) as A));
           callback?.({ ok: true, ...(result ?? {}) });
         } catch (err) {
-          if (err instanceof GameError || err instanceof RoomError) callback?.({ ok: false, error: err.message });
+          if (err instanceof GameError || err instanceof RoomError || err instanceof BluffError) callback?.({ ok: false, error: err.message });
           else {
             console.error('Erro inesperado', err);
             callback?.({ ok: false, error: 'Erro inesperado no servidor.' });
@@ -174,8 +174,10 @@ export async function startServer(opts: ServerOptions = {}) {
     const obj = (p: unknown): Record<string, unknown> => (p && typeof p === 'object' ? (p as Record<string, unknown>) : {});
 
     socket.on('room:create', handle((p: unknown) => {
-      const { name, solo, botCount, code } = obj(p);
+      const { name, solo, botCount, code, mode, special, botLevel } = obj(p);
       const r = manager.create(playerId, String(name ?? ''), solo ? undefined : (code as string | undefined));
+      if (mode === 'roleta') manager.updateSettings(playerId, { mode: 'roleta', special: special !== false });
+      if (botLevel === 'easy' || botLevel === 'normal' || botLevel === 'hard') manager.updateSettings(playerId, { botLevel });
       if (solo) {
         const total = typeof botCount === 'number' ? Math.round(botCount) + 1 : 4;
         manager.fillBots(playerId, total);
@@ -195,9 +197,16 @@ export async function startServer(opts: ServerOptions = {}) {
     socket.on('room:fillBots', handle(() => manager.fillBots(playerId)) as never);
     socket.on('room:removePlayer', handle((p: unknown) => manager.removePlayer(playerId, String(obj(p).playerId ?? ''))) as never);
     socket.on('room:settings', handle((p: unknown) => {
-      const ts = obj(p).turnSeconds;
-      manager.updateSettings(playerId, typeof ts === 'number' ? { turnSeconds: ts } : {});
+      const { turnSeconds: ts, mode, special } = obj(p);
+      manager.updateSettings(playerId, {
+        ...(typeof ts === 'number' ? { turnSeconds: ts } : {}),
+        ...(mode === 'classic' || mode === 'roleta' ? { mode } : {}),
+        ...(typeof special === 'boolean' ? { special } : {}),
+        ...(obj(p).botLevel === 'easy' || obj(p).botLevel === 'normal' || obj(p).botLevel === 'hard' ? { botLevel: obj(p).botLevel as 'easy' } : {}),
+      });
     }) as never);
+    socket.on('bluff:play', handle((p: unknown) => manager.bluffPlay(playerId, obj(p).cardIds as string[])) as never);
+    socket.on('bluff:call', handle(() => manager.bluffCall(playerId)) as never);
     socket.on('room:rename', handle((p: unknown) => manager.rename(playerId, String(obj(p).name ?? ''))) as never);
     socket.on('game:start', handle(() => manager.start(playerId)) as never);
     socket.on('game:bid', handle((p: unknown) => manager.bid(playerId, obj(p).value as number)) as never);

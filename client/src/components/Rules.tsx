@@ -80,6 +80,21 @@ export function Rules({ open, onClose }: { open: boolean; onClose: () => void })
             acertar 1 vale 11. Persistindo o empate, repete-se só entre os que continuam empatados.
           </p>
         </Section>
+        <Section n={9} title="Modo Roleta Sem Piedade (2 a 6 jogadores)">
+          <p>
+            A cada rodada: baralho de 20 cartas (6 de cada uma de 3 cores, 1 coringa e o <b>Coringa Preto</b>), uma <b>cor da mesa</b> sorteada e 5
+            cartas para cada um.
+          </p>
+          <p>
+            Na sua vez, jogue de 1 a 3 cartas <b>viradas</b> dizendo que são da cor da mesa (pode blefar). Coringas valem qualquer cor. O próximo
+            pode jogar também ou gritar <b>MENTIRA!</b> — sem cartas, é obrigado a acusar.
+          </p>
+          <p>
+            Se havia carta de outra cor, quem jogou vai para a roleta; se era verdade, quem acusou vai. Se a jogada acusada tinha o{' '}
+            <b>Coringa Preto</b>, todos menos quem jogou vão para a roleta.
+          </p>
+          <p>Roleta: 6 espaços e 1 bala; a cada puxada a chance aumenta. Quem for atingido sai. O último de pé vence.</p>
+        </Section>
       </div>
     </Modal>
   );
