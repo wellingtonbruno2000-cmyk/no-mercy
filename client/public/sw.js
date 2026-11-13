@@ -1,6 +1,6 @@
 /* NO MERCY — service worker: permite instalar como app e abrir rápido.
    O jogo precisa de internet (o servidor decide as jogadas); aqui só guardamos os arquivos da interface. */
-const CACHE = 'nomercy-v4';
+const CACHE = 'nomercy-v5';
 const SHELL = ['/', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/favicon.svg'];
 
 self.addEventListener('install', (e) => {

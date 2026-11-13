@@ -318,6 +318,7 @@ const _qa = new THREE.Quaternion();
 const _qb = new THREE.Quaternion();
 const _qc = new THREE.Quaternion();
 const _m4 = new THREE.Matrix4();
+const _eu = new THREE.Euler();
 const ARM_UP = 0.27;
 const ARM_LOW = 0.26;
 const smooth01 = (x: number) => {
@@ -390,6 +391,11 @@ class Character {
   private temples: THREE.Object3D[] = [];
   private armInit = false;
   private lastTick = 0;
+  private tmpLook = new THREE.Vector3();
+  private tmpHands = [new THREE.Vector3(), new THREE.Vector3()];
+  private tmpPoles = [new THREE.Vector3(), new THREE.Vector3()];
+  private tmpGrab = new THREE.Vector3();
+  private tmpTemple = new THREE.Vector3();
   private brows: { m: THREE.Mesh; base: number }[] = [];
   private playStart = -1;
   private tapStart = -1;
@@ -398,7 +404,10 @@ class Character {
   // ---- Modo Roleta: revólver, mira, disparo e queda
   private gun = new THREE.Group();
   private gunDrum: THREE.Mesh | null = null;
-  private flash: THREE.PointLight;
+  /** Ponto do cano (a luz do disparo é uma só, da cena, levada até aqui). */
+  private flash = new THREE.Object3D();
+  /** Intensidade do clarão neste quadro (0 = sem tiro). */
+  flashPower = 0;
   private flashSprite: THREE.Sprite;
   private smoke: THREE.Sprite;
   private aimStart = -1;
@@ -590,7 +599,6 @@ class Character {
     grip.position.set(0, -0.03, -0.025);
     grip.rotation.x = -0.35;
     this.gun.add(barrel, drum, frame, grip);
-    this.flash = new THREE.PointLight(0xffb347, 0, 2.2);
     this.flash.position.set(0, 0.025, 0.18);
     this.flashSprite = new THREE.Sprite(
       new THREE.SpriteMaterial({
@@ -677,7 +685,7 @@ class Character {
 
   private gunOnTable() {
     this.gunTablePos(this.gun.position);
-    this.gun.quaternion.setFromEuler(new THREE.Euler(0, this.gunSide * 0.6, this.gunSide * (Math.PI / 2)));
+    this.gun.quaternion.setFromEuler(_eu.set(0, this.gunSide * 0.6, this.gunSide * (Math.PI / 2)));
   }
 
   /**
@@ -690,7 +698,7 @@ class Character {
     _m4.lookAt(temple, hand, this.gun.up);
     _qa.setFromRotationMatrix(_m4);
     if (recoil > 0) _qa.multiply(_qc.setFromAxisAngle(_c.set(1, 0, 0), -recoil * 0.5)); // cano sobe no tranco
-    _qb.setFromEuler(new THREE.Euler(0, this.gunSide * 0.6, this.gunSide * (Math.PI / 2)));
+    _qb.setFromEuler(_eu.set(0, this.gunSide * 0.6, this.gunSide * (Math.PI / 2)));
     this.gun.quaternion.copy(_qb).slerp(_qa, k);
     // coronha na palma: desloca o revólver para a mão segurar o cabo
     const grip = _d.set(0, -0.035, -0.03).multiplyScalar(this.gun.scale.x).applyQuaternion(this.gun.quaternion);
@@ -762,6 +770,11 @@ class Character {
       this.group.rotation.x = 0;
       this.head.rotation.z = 0;
     }
+  }
+
+  /** Posição do cano no mundo (para a luz do disparo). */
+  muzzleWorld(target: THREE.Vector3) {
+    return this.flash.getWorldPosition(target);
   }
 
   headAngles() {
@@ -930,7 +943,7 @@ class Character {
     this.body.scale.y = 1 + Math.sin(t * 1.6 + this.phase) * 0.012;
 
     // Olhar: converte o ponto do mundo para o espaço do personagem.
-    const local = this.group.worldToLocal(this.lookPoint.clone());
+    const local = this.group.worldToLocal(this.tmpLook.copy(this.lookPoint));
     const dx = local.x;
     const dz = local.z;
     const dy = local.y - 1.52;
@@ -939,8 +952,12 @@ class Character {
     let bodyY = 0.55;
     let bodyX = 0;
     // Alvos das mãos no espaço do corpo (mãos apoiadas na mesa segurando as cartas)
-    const hands = [-1, 1].map((sd) => new THREE.Vector3(sd * 0.15, 0.37, 0.41));
-    const poles = [-1, 1].map((sd) => new THREE.Vector3(sd, -0.4, -0.8));
+    const hands = this.tmpHands;
+    const poles = this.tmpPoles;
+    hands[0].set(-0.15, 0.37, 0.41);
+    hands[1].set(0.15, 0.37, 0.41);
+    poles[0].set(-1, -0.4, -0.8);
+    poles[1].set(1, -0.4, -0.8);
     let armK = 0.25;
     if (this.active) {
       yaw = 0;
@@ -989,8 +1006,8 @@ class Character {
     const lift = gp <= REACH ? 0 : smooth01((gp - REACH) / (1 - REACH));
     if (gp > 0 && this.gun.visible) {
       const sd = this.gunSide;
-      const grab = this.toBody(this.gunTablePos(new THREE.Vector3()).add(_e.set(0, 0.02, -0.03)));
-      const temple = this.body.worldToLocal(this.temples[sd === -1 ? 0 : 1].getWorldPosition(new THREE.Vector3()));
+      const grab = this.toBody(this.gunTablePos(this.tmpGrab).add(_e.set(0, 0.02, -0.03)));
+      const temple = this.body.worldToLocal(this.temples[sd === -1 ? 0 : 1].getWorldPosition(this.tmpTemple));
       const atHead = temple.add(_e.set(sd * (0.235 + recoilAmt * 0.04), -0.015 + recoilAmt * 0.03, -0.035));
       const h = hands[ga];
       if (gp <= REACH) h.lerp(grab, smooth01(gp / REACH));
@@ -1010,8 +1027,7 @@ class Character {
         const f = now - this.fireAt;
         // Fogo do cano só quando o tiro sai (BANG): clarão grande que ilumina a mesa
         const burst = this.fireHit && f < 220;
-        this.flash.intensity = burst ? 26 * (1 - f / 220) : 0;
-        this.flash.distance = 5;
+        this.flashPower = burst ? 26 * (1 - f / 220) : 0;
         this.flashSprite.visible = burst;
         if (burst) this.flashSprite.scale.setScalar(0.22 + (f / 220) * 0.25);
         const sm = this.smoke.material as THREE.SpriteMaterial;
@@ -1030,7 +1046,7 @@ class Character {
       const jolt = since < 180 ? Math.sin((since / 180) * Math.PI) * 0.25 : 0;
       this.group.rotation.x = THREE.MathUtils.lerp(this.group.rotation.x, -1.15, since < 180 ? 0.02 : 0.07) + jolt * 0.1;
       this.head.rotation.z = THREE.MathUtils.lerp(this.head.rotation.z, this.gunSide * 0.6, 0.06); // cabeça tomba
-      this.flash.intensity = 0;
+      this.flashPower = 0;
       this.flashSprite.visible = false;
       hands[0].set(-0.36, 0.14, 0.02); // braços soltos
       hands[1].set(0.36, 0.14, 0.02);
@@ -1076,6 +1092,10 @@ export class BarScene {
   private camera = new THREE.PerspectiveCamera(50, 1, 0.1, 50);
   private chars: Character[] = [];
   private room: BarRoom | null = null;
+  private muzzle: THREE.PointLight | null = null;
+  private camFlash: THREE.Object3D | null = null;
+  private camDrum: THREE.Object3D | null = null;
+  private tmpV = new THREE.Vector3();
   private seatsRoot: THREE.Group[] = [];
   private trickCards = new Map<string, { mesh: THREE.Mesh; target: THREE.Vector3; rot: number }>();
   private myPile = new THREE.Group();
@@ -1148,6 +1168,7 @@ export class BarScene {
     });
     container.appendChild(this.renderer.domElement);
     this.build(mobile);
+    this.warmUp();
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(container);
     this.resize();
@@ -1360,10 +1381,12 @@ export class BarScene {
       camFlash.position.set(-0.18, 0.03, 0);
       camFlash.scale.setScalar(0.25);
       camFlash.visible = false;
-      const camLight = new THREE.PointLight(0xffb347, 0, 4);
-      camLight.name = 'flashLight';
-      camLight.position.set(-0.18, 0.03, 0);
-      this.camGun.add(barrel, drum, grip, fist, camFlash, camLight);
+      this.camGun.add(barrel, drum, grip, fist, camFlash);
+      this.camFlash = camFlash;
+      this.camDrum = drum;
+      // Uma única luz de disparo para todos (antes: uma por revólver — cada luz pesa em todo o cenário)
+      this.muzzle = new THREE.PointLight(0xffb347, 0, 5, 1.6);
+      s.add(this.muzzle);
       this.camGun.scale.setScalar(0.55);
       this.camGun.position.set(0.3, -0.45, -0.5);
       this.camGun.visible = false;
@@ -1389,8 +1412,8 @@ export class BarScene {
       g.fillStyle = gr;
       g.fillRect(0, 0, w, h);
     });
-    for (let i = 0; i < (mobile ? 14 : 26); i++) {
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: smokeTex, transparent: true, depthWrite: false, opacity: rnd(0.12, 0.3) }));
+    for (let i = 0; i < (mobile ? 9 : 15); i++) {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: smokeTex, transparent: true, depthWrite: false, opacity: rnd(0.18, 0.36) }));
       sp.position.set(rnd(-3, 3), rnd(1.6, 3.2), rnd(-4, 1));
       const sc = rnd(1, 2.6);
       sp.scale.set(sc, sc, 1);
@@ -1762,6 +1785,27 @@ export class BarScene {
     });
   }
 
+  /**
+   * Compila de uma vez todos os shaders, inclusive de peças ainda escondidas (revólveres, clarão,
+   * arma em 1ª pessoa). Sem isso, a primeira vez que cada uma aparece dá um "engasgo".
+   */
+  private warmUp() {
+    const hidden: THREE.Object3D[] = [];
+    this.scene.traverse((o) => {
+      if (!o.visible) {
+        hidden.push(o);
+        o.visible = true;
+      }
+    });
+    try {
+      this.renderer.compile(this.scene, this.camera);
+    } catch {
+      /* sem problema: compila sob demanda */
+    } finally {
+      hidden.forEach((o) => (o.visible = false));
+    }
+  }
+
   /** Reduz a qualidade automaticamente se o aparelho não acompanhar (evita travamentos). */
   private adaptQuality(now: number) {
     this.frames++;
@@ -1776,14 +1820,19 @@ export class BarScene {
     this.fps = (this.frames * 1000) / elapsed;
     this.frames = 0;
     this.fpsWindowStart = now;
-    this.lowStreak = this.fps < 40 ? this.lowStreak + 1 : 0;
-    if (this.lowStreak >= 3 && this.quality > 0) {
+    this.lowStreak = this.fps < 45 ? this.lowStreak + 1 : 0;
+    // 1º: resolução interna um pouco menor (quase imperceptível), em degraus, mantendo tudo na tela
+    const pr = this.renderer.getPixelRatio();
+    if (this.lowStreak >= 2 && pr > 1.01) {
+      this.lowStreak = 0;
+      this.renderer.setPixelRatio(Math.max(1, +(pr * 0.8).toFixed(2)));
+      this.resize();
+    } else if (this.lowStreak >= 3 && this.fps < 28 && this.quality > 0) {
+      // último recurso, só em aparelho muito fraco
       this.lowStreak = 0;
       this.quality--;
       if (this.quality === 1) {
-        this.renderer.setPixelRatio(1);
         this.smokes.forEach((sp, i) => (sp.visible = i % 2 === 0));
-        this.resize();
       } else if (this.quality === 0) {
         this.renderer.shadowMap.enabled = false;
         this.spot.castShadow = false;
@@ -1834,21 +1883,27 @@ export class BarScene {
       const show = this.camGunState === 'aim';
       this.camGun.visible = show || this.camGun.position.y > -0.35;
       // canto direito da tela, cano apontando para a sua cabeça (para a esquerda e um pouco para trás)
-      const tgt = show ? new THREE.Vector3(0.24, 0.02, -0.42) : new THREE.Vector3(0.3, -0.5, -0.5);
+      const tgt = show ? this.tmpV.set(0.24, 0.02, -0.42) : this.tmpV.set(0.3, -0.5, -0.5);
       this.camGun.position.lerp(tgt, 0.12);
       this.camGun.rotation.z = THREE.MathUtils.lerp(this.camGun.rotation.z, show ? -0.35 : 0, 0.12);
       this.camGun.rotation.y = THREE.MathUtils.lerp(this.camGun.rotation.y, show ? 0.55 : 0, 0.12);
       const fl = performance.now() - this.myFlashAt;
       const burst = this.myFlashAt > 0 && fl < 220;
-      const camFlash = this.camGun.getObjectByName('flash');
-      const camLight = this.camGun.getObjectByName('flashLight') as THREE.PointLight | undefined;
-      if (camFlash) camFlash.visible = burst;
-      if (camLight) camLight.intensity = burst ? 20 * (1 - fl / 220) : 0;
-      const drum = this.camGun.getObjectByName('drum');
-      if (drum && show && shakeLeft <= 0) drum.rotation.x += 0.25;
+      if (this.camFlash) this.camFlash.visible = burst;
+      if (this.camDrum && show && shakeLeft <= 0) this.camDrum.rotation.x += 0.25;
+      if (burst && this.muzzle && this.camFlash) {
+        this.muzzle.intensity = 20 * (1 - fl / 220);
+        this.camFlash.getWorldPosition(this.muzzle.position);
+      } else if (this.muzzle) this.muzzle.intensity = 0;
     }
     this.updateLooks();
-    for (const c of this.chars) c.tick(t, this.camera.position);
+    for (const c of this.chars) {
+      c.tick(t, this.camera.position);
+      if (c.flashPower > 0 && this.muzzle) {
+        this.muzzle.intensity = c.flashPower;
+        c.muzzleWorld(this.muzzle.position);
+      }
+    }
     this.room?.tick(t);
     if (this.hand.enabled) {
       this.layoutHand();

@@ -173,7 +173,7 @@ export function BluffGame({ room }: { room: RoomView }) {
           <BluffTable3D room={room} onFail={onFail3d} onReady={onReady3d} />
         </Suspense>
       )}
-      <header className="z-20 flex items-center gap-2 border-b border-white/5 bg-black/25 px-3 py-2 backdrop-blur-md">
+      <header className="z-20 flex items-center gap-2 border-b border-white/5 bg-[#0d0805]/85 px-3 py-2">
         <div className="hidden sm:block">
           <Logo size="sm" />
         </div>
@@ -307,7 +307,7 @@ export function BluffGame({ room }: { room: RoomView }) {
       </main>
 
       {/* Minha área */}
-      <section className="relative z-20 border-t border-white/5 bg-black/30 px-3 pb-[max(env(safe-area-inset-bottom),12px)] pt-2 backdrop-blur-md">
+      <section className="relative z-20 border-t border-white/5 bg-[#0d0805]/85 px-3 pb-[max(env(safe-area-inset-bottom),12px)] pt-2">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-2 pb-1">
           <div className="relative flex items-center gap-2">
             <SpeechBubble playerId={b.you} className="-top-10 left-0" />
@@ -365,7 +365,7 @@ export function BluffGame({ room }: { room: RoomView }) {
         {b.phase === 'ROULETTE' && rouletteId && !layout3d && (
           <motion.div
             key={`${rouletteId}-${shot?.pull ?? 0}`}
-            className="pointer-events-none fixed inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-black/55 backdrop-blur-[2px]"
+            className="pointer-events-none fixed inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-black/60"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

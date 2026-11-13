@@ -282,18 +282,90 @@ class Batch {
     this.parts.set(mat, list);
   }
 
-  flush(parent: THREE.Object3D, shadows = true) {
+  /**
+   * Junta tudo e "assa" as luzes decorativas nos vértices: o brilho das luminárias, arandelas, velas
+   * e neons fica gravado na geometria (mesma fórmula da luz real do three.js), sem custo por quadro.
+   */
+  flush(parent: THREE.Object3D, baked: BakedLight[], shadowed: Set<THREE.Material>) {
     for (const [mat, list] of this.parts) {
       const merged = mergeGeometries(list, false);
       list.forEach((g) => g.dispose());
       if (!merged) continue;
+      if ((mat as THREE.MeshStandardMaterial).isMeshStandardMaterial) {
+        merged.setAttribute('bake', bakeLights(merged, baked));
+        useBake(mat as THREE.MeshStandardMaterial);
+      }
       const mesh = new THREE.Mesh(merged, mat);
-      mesh.receiveShadow = shadows;
+      // só o que fica sob a luz da mesa recebe sombra (paredes/teto não precisam calcular)
+      mesh.receiveShadow = shadowed.has(mat);
       mesh.matrixAutoUpdate = false;
       parent.add(mesh);
     }
     this.parts.clear();
   }
+}
+
+export interface BakedLight {
+  p: THREE.Vector3;
+  color: THREE.Color;
+  intensity: number;
+  dist: number;
+}
+
+const bl = (color: number, intensity: number, dist: number, x: number, y: number, z: number): BakedLight => ({
+  p: new THREE.Vector3(x, y, z),
+  color: new THREE.Color(color),
+  intensity,
+  dist,
+});
+
+/** Luz difusa de cada luz pontual em cada vértice (igual ao three.js: queda com distância e decaimento 1.4). */
+function bakeLights(g: THREE.BufferGeometry, lights: BakedLight[]) {
+  const pos = g.getAttribute('position');
+  const nor = g.getAttribute('normal');
+  const out = new Float32Array(pos.count * 3);
+  const P = new THREE.Vector3();
+  const N = new THREE.Vector3();
+  const L = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    P.fromBufferAttribute(pos, i);
+    N.fromBufferAttribute(nor, i);
+    let r = 0;
+    let gg = 0;
+    let bb = 0;
+    for (const l of lights) {
+      L.subVectors(l.p, P);
+      const d = L.length();
+      if (d >= l.dist) continue;
+      const ndl = Math.max(0, N.dot(L) / (d || 1));
+      if (ndl <= 0) continue;
+      const f = Math.max(0, 1 - (d / l.dist) ** 4);
+      const att = (f * f) / Math.max(d ** 1.4, 0.01);
+      const k = (l.intensity * ndl * att) / Math.PI;
+      r += l.color.r * k;
+      gg += l.color.g * k;
+      bb += l.color.b * k;
+    }
+    out[i * 3] = r;
+    out[i * 3 + 1] = gg;
+    out[i * 3 + 2] = bb;
+  }
+  return new THREE.BufferAttribute(out, 3);
+}
+
+/** Soma a luz assada no shader padrão (como se fosse luz real, mas pré-calculada). */
+function useBake(m: THREE.MeshStandardMaterial) {
+  if (m.userData.baked) return;
+  m.userData.baked = true;
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute vec3 bake;\nvarying vec3 vBake;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBake = bake;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vBake;')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vBake * diffuseColor.rgb;');
+  };
+  m.customProgramCacheKey = () => 'nm-bake';
 }
 
 const at = (x: number, y: number, z: number, ry = 0) =>
@@ -338,8 +410,8 @@ export function buildBarRoom(scene: THREE.Scene, mobile: boolean): BarRoom {
   scene.fog = new THREE.Fog(0x1a110b, 9, 26);
 
   // ---- piso, teto, paredes
-  b.add(new THREE.PlaneGeometry(W, D), mFloor, null, 0, 0, 0, -Math.PI / 2);
-  b.add(new THREE.PlaneGeometry(W, D), mCeil, null, 0, H, 0, Math.PI / 2);
+  b.add(new THREE.PlaneGeometry(W, D, 54, 45), mFloor, null, 0, 0, 0, -Math.PI / 2);
+  b.add(new THREE.PlaneGeometry(W, D, 27, 22), mCeil, null, 0, H, 0, Math.PI / 2);
   for (let z = back + 1.5; z < front; z += 2.6) b.add(new THREE.BoxGeometry(W, 0.22, 0.25), mBeam, null, 0, H - 0.11, z);
   const walls: [number, number, number, number, number][] = [
     // x, z, ry, largura, (0 fundo/frente, 1 lateral)
@@ -350,8 +422,8 @@ export function buildBarRoom(scene: THREE.Scene, mobile: boolean): BarRoom {
   ];
   for (const [x, z, ry, len, side] of walls) {
     const base = at(x, 0, z, ry);
-    b.add(new THREE.PlaneGeometry(len, H), side ? mBrickSide : mBrick, base, 0, H / 2, 0);
-    b.add(new THREE.BoxGeometry(len, 1.2, 0.06), mPanel, base, 0, 0.6, 0.03);
+    b.add(new THREE.PlaneGeometry(len, H, Math.round(len * 3), 14), side ? mBrickSide : mBrick, base, 0, H / 2, 0);
+    b.add(new THREE.BoxGeometry(len, 1.2, 0.06, Math.round(len * 3), 4, 1), mPanel, base, 0, 0.6, 0.03);
     b.add(new THREE.BoxGeometry(len, 0.07, 0.1), mTrim, base, 0, 1.22, 0.05);
     b.add(new THREE.BoxGeometry(len, 0.14, 0.08), mTrim, base, 0, 0.07, 0.06);
     b.add(new THREE.BoxGeometry(len, 0.16, 0.12), mTrim, base, 0, H - 0.08, 0.06);
@@ -367,7 +439,7 @@ export function buildBarRoom(scene: THREE.Scene, mobile: boolean): BarRoom {
   // ---- balcão do bar (fundo)
   const barZ = back + 2.1;
   const barLen = 8.4;
-  b.add(new THREE.BoxGeometry(barLen, 1.04, 0.7), mBar, null, 0, 0.52, barZ);
+  b.add(new THREE.BoxGeometry(barLen, 1.04, 0.7, 24, 4, 1), mBar, null, 0, 0.52, barZ);
   b.add(new THREE.BoxGeometry(barLen + 0.3, 0.07, 0.95), mBarTop, null, 0, 1.075, barZ + 0.05);
   b.add(new THREE.BoxGeometry(barLen, 0.1, 0.06), mTrim, null, 0, 0.95, barZ + 0.37);
   for (let x = -barLen / 2 + 0.7; x < barLen / 2; x += 1.4) b.add(new THREE.BoxGeometry(1.1, 0.6, 0.02), mTrim, null, x, 0.5, barZ + 0.36);
@@ -533,7 +605,7 @@ export function buildBarRoom(scene: THREE.Scene, mobile: boolean): BarRoom {
     scene.add(pane);
     b.add(new THREE.CylinderGeometry(0.03, 0.03, 1.8, 8), mDark, null, -1.5, 0.9, front - 0.4);
     b.add(new THREE.CylinderGeometry(0.22, 0.25, 0.03, 16), mDark, null, -1.5, 0.015, front - 0.4);
-    b.add(new THREE.SphereGeometry(0.22, 12, 10), std({ color: 0x3a2a1a }), null, -1.5, 1.75, front - 0.4);
+    b.add(new THREE.SphereGeometry(0.22, 12, 10), mWood, null, -1.5, 1.75, front - 0.4);
   }
 
   // ---- arandelas nas paredes (brilho sem custo de luz)
@@ -550,43 +622,51 @@ export function buildBarRoom(scene: THREE.Scene, mobile: boolean): BarRoom {
     [-4.5, 2.6, front - 0.1, Math.PI],
     [5.5, 2.6, front - 0.1, Math.PI],
   ];
+  const sconceGlow = new THREE.SpriteMaterial({ map: glowAmber, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.8 });
   for (const [x, y, z, ry] of sconces) {
     const base = at(x, 0, z, ry);
     b.add(new THREE.BoxGeometry(0.14, 0.22, 0.04), mBrass, base, 0, y, 0);
     b.add(new THREE.CylinderGeometry(0.1, 0.06, 0.18, 14, 1, true), mSconce, base, 0, y + 0.12, 0.12);
-    const g = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowAmber, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.8 }));
+    const g = new THREE.Sprite(sconceGlow);
     g.position.copy(new THREE.Vector3(0, y + 0.12, 0.16).applyMatrix4(base));
     g.scale.set(1.1, 1.1, 1);
     scene.add(g);
   }
 
-  b.flush(scene);
+  // Luzes decorativas assadas na geometria (custo zero por quadro, em PC e celular)
+  const baked: BakedLight[] = [
+    ...lamps.map((l) => bl(0xffb870, 5, 6, l.x, l.y, l.z)),
+    bl(0x6ad8ff, 3, 6, -W / 2 + 1, 3, -0.6), // neon BEBIDAS
+    bl(0xff6ad8, 3, 6, W / 2 - 1.2, 2.2, -1), // jukebox / BLEFE & BALA
+    bl(0xffa860, 3.5, 8, -6.6, 1.8, 0),
+    bl(0xffa860, 2.5, 7, 6.2, 1.8, 2.5),
+    ...sconces.map(([x, y, z, ry]) => {
+      const p = new THREE.Vector3(0, y + 0.15, 0.25).applyMatrix4(at(x, 0, z, ry));
+      return bl(0xffb36a, 1.6, 3.2, p.x, p.y, p.z);
+    }),
+    ...candles.map((c) => bl(0xffa050, 0.5, 1.8, c.x, c.y + 0.05, c.z)),
+    bl(0x8aa8ff, 0.8, 3, -W / 2 + 0.5, 2.2, -3.2), // luar das janelas
+    bl(0x8aa8ff, 0.8, 3, -W / 2 + 0.5, 2.2, 2.6),
+  ];
+  b.flush(scene, baked, new Set<THREE.Material>([mFloor]));
 
-  // ---- luzes do ambiente (poucas, sem sombra)
-  const lights: THREE.PointLight[] = [];
+  // Luzes reais (só 2: também iluminam personagens e garrafas)
   const pl = (color: number, intensity: number, dist: number, p: THREE.Vector3) => {
     const l = new THREE.PointLight(color, intensity, dist, 1.4);
     l.position.copy(p);
     scene.add(l);
-    lights.push(l);
     return l;
   };
   pl(0xffb870, 9, 9, new THREE.Vector3(0, 2.6, barZ + 0.6)); // balcão e garrafas
   pl(0xff5a48, 3, 7, new THREE.Vector3(0, 3.3, back + 1)); // neon NO MERCY
-  if (!mobile) {
-    pl(0xffb870, 5, 6, lamps[0]);
-    pl(0xffb870, 5, 6, lamps[2]);
-    pl(0x6ad8ff, 3, 6, new THREE.Vector3(-W / 2 + 1, 3, -0.6)); // neon BEBIDAS
-    pl(0xff6ad8, 3, 6, new THREE.Vector3(W / 2 - 1.2, 2.2, -1)); // jukebox / BLEFE & BALA
-  }
+  const flameMat = new THREE.SpriteMaterial({ map: glowAmber, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
   const candleLights = candles.map((c) => {
-    const flame = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowAmber, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    const flame = new THREE.Sprite(flameMat);
     flame.position.copy(c);
     flame.scale.set(0.35, 0.45, 1);
     scene.add(flame);
     return flame;
   });
-  const sideFill = mobile ? null : pl(0xffa860, 3.5, 8, new THREE.Vector3(-6.6, 1.8, 0));
 
   return {
     tick(t: number) {
@@ -594,7 +674,6 @@ export function buildBarRoom(scene: THREE.Scene, mobile: boolean): BarRoom {
         const k = 0.85 + Math.sin(t * 9 + i * 2.1) * 0.08 + Math.sin(t * 23 + i) * 0.05;
         f.scale.set(0.35 * k, 0.45 * k, 1);
       });
-      if (sideFill) sideFill.intensity = 3.5 + Math.sin(t * 7) * 0.2;
     },
   };
 }

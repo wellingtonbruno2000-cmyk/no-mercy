@@ -280,7 +280,7 @@ function TopBar({
 }) {
   const tiebreak = g.stage === 'TIEBREAK';
   return (
-    <header className="z-20 flex items-center gap-2 border-b border-white/5 bg-black/25 px-3 py-2 backdrop-blur-md">
+    <header className="z-20 flex items-center gap-2 border-b border-white/5 bg-[#0d0805]/85 px-3 py-2">
       <div className="hidden sm:block">
         <Logo size="sm" />
       </div>
@@ -677,7 +677,7 @@ function MyArea({
       className={`z-20 px-3 pb-[max(env(safe-area-inset-bottom),12px)] pt-2 ${
         mode3d
           ? `absolute inset-x-0 bottom-0 ${hand3d ? 'pointer-events-none bg-gradient-to-b from-transparent to-black/50' : 'bg-gradient-to-b from-transparent via-black/40 to-black/80'}`
-          : 'relative border-t border-white/5 bg-black/30 backdrop-blur-md'
+          : 'relative border-t border-white/5 bg-[#0d0805]/80'
       }`}
     >
       <div className="mx-auto flex max-w-4xl items-center justify-between gap-2 pb-1">

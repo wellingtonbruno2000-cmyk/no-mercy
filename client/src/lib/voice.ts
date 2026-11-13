@@ -99,9 +99,11 @@ function makeAnalyser(stream: MediaStream): AnalyserNode | null {
   }
 }
 
+let meterBuf = new Uint8Array(0);
 function level(an: AnalyserNode | null): number {
   if (!an) return 0;
-  const buf = new Uint8Array(an.fftSize);
+  if (meterBuf.length !== an.fftSize) meterBuf = new Uint8Array(an.fftSize);
+  const buf = meterBuf;
   an.getByteTimeDomainData(buf);
   let sum = 0;
   for (const v of buf) sum += ((v - 128) / 128) ** 2;
