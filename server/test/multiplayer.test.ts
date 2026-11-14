@@ -265,7 +265,7 @@ describe('multiplayer', () => {
     await emit(b, 'room:join', { code, name: 'B' });
     expect((await emit(a, 'game:start')).ok).toBe(true);
     const v = await waitFor(b, (x) => x.status === 'PLAYING');
-    expect(v.game!.maxHands).toBe(27);
+    expect(v.game!.maxHands).toBe(12);
     expect(v.game!.participants).toHaveLength(2);
     a.socket.disconnect();
     b.socket.disconnect();

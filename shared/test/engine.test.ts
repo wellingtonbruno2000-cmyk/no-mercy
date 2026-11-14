@@ -90,7 +90,7 @@ describe('baralho', () => {
   });
 
   it('quantidade de partidas por jogadores', () => {
-    expect([2, 3, 4, 5, 6, 7, 8].map(maxHandsFor)).toEqual([27, 18, 13, 11, 9, 7, 6]);
+    expect([2, 3, 4, 5, 6, 7, 8].map(maxHandsFor)).toEqual([12, 12, 12, 11, 9, 7, 6]);
   });
 });
 

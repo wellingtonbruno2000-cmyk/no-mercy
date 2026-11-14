@@ -12,7 +12,7 @@ export const COLOR_LABEL: Record<CardColor, string> = {
 };
 
 /** Versão do jogo (mostrada na tela inicial e em /health). */
-export const APP_VERSION = '2.5.0';
+export const APP_VERSION = '2.5.1';
 
 export const DECK_SIZE = 55;
 export const MIN_PLAYERS = 2;
@@ -90,9 +90,12 @@ export function tableShuffle<T>(items: readonly T[], randomInt: RandomInt = defa
   return cutDeck(deck, randomInt);
 }
 
-/** Máximo de partidas do jogo para N jogadores. */
+/** Limite de partidas do modo clássico (no máximo 12 cartas na mão), mesmo com poucos jogadores. */
+export const MAX_HANDS_CAP = 12;
+
+/** Máximo de partidas do jogo para N jogadores: até 12, ou menos se o baralho não der para todos. */
 export function maxHandsFor(playerCount: number): number {
-  return Math.floor(DECK_SIZE / playerCount);
+  return Math.min(MAX_HANDS_CAP, Math.floor(DECK_SIZE / playerCount));
 }
 
 /**
